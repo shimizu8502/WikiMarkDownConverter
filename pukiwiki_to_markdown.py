@@ -132,6 +132,98 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
         for i, block in enumerate(preformatted_blocks):
             markdown_text += f"\n```\n{block}\n```"
 
+    # カンマ区切りテーブルの変換
+    # 例: ,A,B,C や 空欄,A,B,C
+    csv_table_lines = []
+    csv_other_lines = []
+    is_csv_table = False
+    for line in markdown_text.split('\n'):
+        # 行頭がカンマで始まるか、カンマを含む行を検出
+        if line.startswith(',') or (re.match(r'^[^,]+,', line) and line.count(',') >= 2):
+            # すでにテーブル行として処理されていないか確認（|| や | で始まる行は除外）
+            if not line.startswith('|'):
+                csv_table_lines.append(line)
+                is_csv_table = True
+                continue
+        
+        # テーブル行でない場合、または区切りを検出した場合
+        if is_csv_table and csv_table_lines and (not line.startswith(',') and not re.match(r'^[^,]+,', line)):
+            # テーブルの終了を検出
+            header = csv_table_lines[0]
+            header_cells = header.split(',')
+            
+            # 先頭のセルが空の場合は除外
+            if header_cells[0] == '':
+                header_cells = header_cells[1:]
+            
+            # テーブルのヘッダー行を生成
+            markdown_table = "| " + " | ".join(header_cells) + " |\n"
+            # 区切り行を生成
+            markdown_table += "| " + " | ".join(["---"] * len(header_cells)) + " |\n"
+            
+            # データ行の処理
+            for row_line in csv_table_lines[1:]:
+                cells = row_line.split(',')
+                
+                # 先頭のセルが空の場合は除外
+                if cells[0] == '':
+                    cells = cells[1:]
+                
+                # セル数がヘッダーセル数より少ない場合、空セルで埋める
+                while len(cells) < len(header_cells):
+                    cells.append('')
+                
+                # ヘッダーセル数より多い場合は切り捨て
+                cells = cells[:len(header_cells)]
+                
+                markdown_table += "| " + " | ".join(cells) + " |\n"
+            
+            csv_other_lines.append("") # テーブルの前に改行を挿入
+            csv_other_lines.append(markdown_table)
+            
+            # テーブル処理の終了
+            csv_table_lines = []
+            is_csv_table = False
+        
+        if not is_csv_table:
+            csv_other_lines.append(line)
+    
+    # ファイル末尾がカンマ区切りテーブルの場合の処理
+    if is_csv_table and csv_table_lines:
+        header = csv_table_lines[0]
+        header_cells = header.split(',')
+        
+        # 先頭のセルが空の場合は除外
+        if header_cells[0] == '':
+            header_cells = header_cells[1:]
+        
+        # テーブルのヘッダー行を生成
+        markdown_table = "| " + " | ".join(header_cells) + " |\n"
+        # 区切り行を生成
+        markdown_table += "| " + " | ".join(["---"] * len(header_cells)) + " |\n"
+        
+        # データ行の処理
+        for row_line in csv_table_lines[1:]:
+            cells = row_line.split(',')
+            
+            # 先頭のセルが空の場合は除外
+            if cells[0] == '':
+                cells = cells[1:]
+            
+            # セル数がヘッダーセル数より少ない場合、空セルで埋める
+            while len(cells) < len(header_cells):
+                cells.append('')
+            
+            # ヘッダーセル数より多い場合は切り捨て
+            cells = cells[:len(header_cells)]
+            
+            markdown_table += "| " + " | ".join(cells) + " |\n"
+        
+        csv_other_lines.append("") # テーブルの前に改行を挿入
+        csv_other_lines.append(markdown_table)
+    
+    markdown_text = "\n".join(csv_other_lines)
+
     # 表組みの変換 (簡易的な対応)
     # |A|B|C| や |~A|~B|~C|
     table_lines = []
