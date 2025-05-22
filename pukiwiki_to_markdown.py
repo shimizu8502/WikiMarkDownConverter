@@ -3,7 +3,7 @@ import os
 import re
 import sys
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk # ttk をインポート
 import configparser # 設定ファイルの読み書き用
 import datetime # エラーログのタイムスタンプ用
 
@@ -385,10 +385,11 @@ def detect_encoding(file_path):
             continue
     return None # 判定できなかった場合
 
-def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None):
+def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, progress_bar=None, status_var=None, root_window=None):
     """
     PukiWikiからMarkdownへの変換処理を実行します。
     main()関数からロジックを分離。
+    GUIの進捗表示ウィジェットを更新する機能を追加。
     """
     if not pukiwiki_dir or not markdown_dir:
         messagebox.showerror("エラー", "PukiWikiディレクトリとMarkdown出力ディレクトリの両方を選択してください。")
@@ -453,63 +454,88 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None):
     error_count = 0
     # プログレス表示用のテキストエリアなどをGUIに追加することも検討できる
 
+    # 処理対象ファイルリストの取得
+    files_to_process = []
     for filename in os.listdir(pukiwiki_dir):
         pukiwiki_filepath = os.path.join(pukiwiki_dir, filename)
         if os.path.isfile(pukiwiki_filepath) and (filename.endswith('.txt') or filename.endswith('.page')):
-            original_basename, ext = os.path.splitext(filename)
-            decoded_basename = original_basename
-            try:
-                # ファイル名がすべて16進数文字で構成され、かつ偶数長であるかを確認
-                # あまりにも短いファイル名は誤変換の可能性を考慮し、一定長以上(例: 4文字以上)を対象とする
-                if all(c in '0123456789abcdefABCDEF' for c in original_basename) and len(original_basename) % 2 == 0 and len(original_basename) >= 2:
-                    decoded_bytes = bytes.fromhex(original_basename)
-                    decoded_basename_candidate = decoded_bytes.decode('utf-8')
-                    # デコード結果が空文字列や制御文字のみになる場合などを避けるため、
-                    # 簡単なチェックとして、デコード後も何らかの表示可能文字が含まれることを期待する。
-                    # より厳密には、デコード後の文字列が妥当なファイル名文字だけで構成されているかを確認すべきだが、
-                    # ここではPukiWikiのエンコード仕様が不明なため、一旦デコード成功をもって良しとする。
-                    # ただし、元のファイル名と全く同じ場合はヘキサエンコードではなかったとみなす。
-                    if decoded_basename_candidate != original_basename:
-                        decoded_basename = decoded_basename_candidate
-                        print(f"  情報: ファイル名 '{original_basename}{ext}' を '{decoded_basename}{ext}' にデコードしました。")
-            except ValueError:
-                # fromhexでエラー (奇数長や16進数以外の文字が含まれる場合など)
-                # この場合はヘキサエンコードされたファイル名ではないと判断し、元のファイル名を使用
-                pass
-            except UnicodeDecodeError:
-                error_message = f"  警告: ファイル名 '{original_basename}{ext}' のUTF-8デコードに失敗しました。元のファイル名を使用します。"
+            files_to_process.append(filename)
+    
+    total_files = len(files_to_process)
+    if progress_bar:
+        progress_bar["maximum"] = total_files
+        progress_bar["value"] = 0
+    
+    processed_count = 0
+
+    for filename in files_to_process: # os.listdir(pukiwiki_dir)から変更
+        pukiwiki_filepath = os.path.join(pukiwiki_dir, filename)
+        # if os.path.isfile(pukiwiki_filepath) and (filename.endswith('.txt') or filename.endswith('.page')): # このチェックは上で実施済み
+        original_basename, ext = os.path.splitext(filename)
+        decoded_basename = original_basename
+        try:
+            # ファイル名がすべて16進数文字で構成され、かつ偶数長であるかを確認
+            # あまりにも短いファイル名は誤変換の可能性を考慮し、一定長以上(例: 4文字以上)を対象とする
+            if all(c in '0123456789abcdefABCDEF' for c in original_basename) and len(original_basename) % 2 == 0 and len(original_basename) >= 2:
+                decoded_bytes = bytes.fromhex(original_basename)
+                decoded_basename_candidate = decoded_bytes.decode('utf-8')
+                # デコード結果が空文字列や制御文字のみになる場合などを避けるため、
+                # 簡単なチェックとして、デコード後も何らかの表示可能文字が含まれることを期待する。
+                # より厳密には、デコード後の文字列が妥当なファイル名文字だけで構成されているかを確認すべきだが、
+                # ここではPukiWikiのエンコード仕様が不明なため、一旦デコード成功をもって良しとする。
+                # ただし、元のファイル名と全く同じ場合はヘキサエンコードではなかったとみなす。
+                if decoded_basename_candidate != original_basename:
+                    decoded_basename = decoded_basename_candidate
+                    print(f"  情報: ファイル名 '{original_basename}{ext}' を '{decoded_basename}{ext}' にデコードしました。")
+        except ValueError:
+            # fromhexでエラー (奇数長や16進数以外の文字が含まれる場合など)
+            # この場合はヘキサエンコードされたファイル名ではないと判断し、元のファイル名を使用
+            pass
+        except UnicodeDecodeError:
+            error_message = f"  警告: ファイル名 '{original_basename}{ext}' のUTF-8デコードに失敗しました。元のファイル名を使用します。"
+            print(error_message, file=sys.stderr)
+            write_error_log(error_message)
+
+        markdown_filename = decoded_basename + '.md'
+        markdown_filepath = os.path.join(markdown_dir, markdown_filename)
+
+        try:
+            encoding_to_use = specified_encoding
+            if not encoding_to_use:
+                encoding_to_use = detect_encoding(pukiwiki_filepath)
+
+            if not encoding_to_use:
+                error_message = f"警告: ファイル '{pukiwiki_filepath}' の文字コードを自動判別できませんでした。UTF-8として処理を試みます。"
                 print(error_message, file=sys.stderr)
                 write_error_log(error_message)
+                encoding_to_use = 'utf-8' # デフォルトフォールバック
 
-            markdown_filename = decoded_basename + '.md'
-            markdown_filepath = os.path.join(markdown_dir, markdown_filename)
+            with open(pukiwiki_filepath, 'r', encoding=encoding_to_use, errors='replace') as f:
+                pukiwiki_content = f.read()
 
-            try:
-                encoding_to_use = specified_encoding
-                if not encoding_to_use:
-                    encoding_to_use = detect_encoding(pukiwiki_filepath)
+            print(f"  変換中: '{pukiwiki_filepath}' (encoding: {encoding_to_use})")
+            markdown_content = convert_pukiwiki_to_markdown(pukiwiki_content)
 
-                if not encoding_to_use:
-                    error_message = f"警告: ファイル '{pukiwiki_filepath}' の文字コードを自動判別できませんでした。UTF-8として処理を試みます。"
-                    print(error_message, file=sys.stderr)
-                    write_error_log(error_message)
-                    encoding_to_use = 'utf-8' # デフォルトフォールバック
+            with open(markdown_filepath, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
 
-                with open(pukiwiki_filepath, 'r', encoding=encoding_to_use, errors='replace') as f:
-                    pukiwiki_content = f.read()
+            file_count += 1
+        except Exception as e:
+            error_message = f"エラー: ファイル '{pukiwiki_filepath}' の変換中にエラーが発生しました: {e}"
+            print(error_message, file=sys.stderr)
+            write_error_log(error_message)
+            error_count += 1
+        finally:
+            processed_count += 1
+            if progress_bar:
+                progress_bar["value"] = processed_count
+            if status_var:
+                status_var.set(f"処理中: {filename} ({processed_count}/{total_files})")
+            if root_window:
+                root_window.update_idletasks()
 
-                print(f"  変換中: '{pukiwiki_filepath}' (encoding: {encoding_to_use})")
-                markdown_content = convert_pukiwiki_to_markdown(pukiwiki_content)
-
-                with open(markdown_filepath, 'w', encoding='utf-8') as f:
-                    f.write(markdown_content)
-
-                file_count += 1
-            except Exception as e:
-                error_message = f"エラー: ファイル '{pukiwiki_filepath}' の変換中にエラーが発生しました: {e}"
-                print(error_message, file=sys.stderr)
-                write_error_log(error_message)
-                error_count += 1
+    if status_var:
+        status_var.set(f"処理完了: {file_count} / {total_files} ファイルを変換しました。")
 
     result_message = f"処理完了: {file_count} 個のファイルを変換しました。"
     if error_count > 0:
@@ -566,6 +592,17 @@ def main_gui():
     window = tk.Tk()
     window.title("PukiWiki to Markdown Converter")
 
+    # --- スタイルの設定 ---
+    style = ttk.Style()
+    # 利用可能なテーマを確認 (例: 'clam', 'alt', 'default', 'classic')
+    # print(style.theme_names()) 
+    # style.theme_use('clam') # Windowsでは 'vista', 'xpnative' なども利用可能
+    if 'vista' in style.theme_names():
+        style.theme_use('vista')
+    elif 'clam' in style.theme_names():
+        style.theme_use('clam')
+
+
     # --- 設定の読み込み --- START
     initial_pukiwiki_dir, initial_markdown_dir, initial_encoding = load_settings()
     pukiwiki_dir_var = tk.StringVar(value=initial_pukiwiki_dir)
@@ -591,26 +628,42 @@ def main_gui():
         save_settings(p_dir, m_dir, enc)
         # --- 設定の保存 (変換実行時) --- END
         specified_enc = enc if enc != "auto" else None
-        process_conversion(p_dir, m_dir, specified_enc)
+        # プログレスバーとステータスバーを渡す
+        process_conversion(p_dir, m_dir, specified_enc, progress_bar, status_var, window)
 
     # PukiWikiディレクトリ選択
     tk.Label(window, text="PukiWikiデータディレクトリ:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-    tk.Entry(window, textvariable=pukiwiki_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5)
-    tk.Button(window, text="選択", command=select_pukiwiki_dir).grid(row=0, column=2, padx=5, pady=5)
+    ttk.Entry(window, textvariable=pukiwiki_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+    ttk.Button(window, text="選択", command=select_pukiwiki_dir).grid(row=0, column=2, padx=5, pady=5)
 
     # Markdown出力ディレクトリ選択
     tk.Label(window, text="Markdown出力ディレクトリ:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-    tk.Entry(window, textvariable=markdown_dir_var, width=50).grid(row=1, column=1, padx=5, pady=5)
-    tk.Button(window, text="選択", command=select_markdown_dir).grid(row=1, column=2, padx=5, pady=5)
+    ttk.Entry(window, textvariable=markdown_dir_var, width=50).grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+    ttk.Button(window, text="選択", command=select_markdown_dir).grid(row=1, column=2, padx=5, pady=5)
 
     # 文字コード指定 (オプション)
     tk.Label(window, text="入力文字コード:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
     encoding_options = ["auto", "utf-8", "euc-jp", "shift_jis"]
-    tk.OptionMenu(window, encoding_var, *encoding_options).grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+    # tk.OptionMenu を ttk.OptionMenu に変更 (ただし、ttk.OptionMenuは少し使い勝手が異なる場合がある)
+    # ttk.Combobox の方がより一般的で柔軟性がある
+    encoding_combo = ttk.Combobox(window, textvariable=encoding_var, values=encoding_options, state="readonly")
+    encoding_combo.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+    encoding_combo.set(initial_encoding if initial_encoding in encoding_options else "auto")
 
 
     # 実行ボタン
-    tk.Button(window, text="変換実行", command=start_conversion, width=15).grid(row=3, column=0, columnspan=3, padx=5, pady=10)
+    ttk.Button(window, text="変換実行", command=start_conversion, width=15).grid(row=3, column=0, columnspan=3, padx=5, pady=10)
+
+    # --- プログレスバーとステータス表示 --- START
+    status_var = tk.StringVar()
+    status_label = ttk.Label(window, textvariable=status_var, wraplength=500)
+    status_label.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+    status_var.set("準備完了")
+
+    progress_bar = ttk.Progressbar(window, orient="horizontal", length=500, mode="determinate")
+    progress_bar.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+    # --- プログレスバーとステータス表示 --- END
+
 
     # --- ウィンドウクローズ時の設定保存 --- START
     def on_closing():
@@ -622,6 +675,11 @@ def main_gui():
 
     window.protocol("WM_DELETE_WINDOW", on_closing)
     # --- ウィンドウクローズ時の設定保存 --- END
+    
+    # グリッドの列の重み付けを設定して、ウィンドウリサイズ時に中央の要素が広がるようにする
+    window.grid_columnconfigure(1, weight=1)
+    # ステータスラベル行の最小の高さを設定して、縦方向のサイズ変動を防ぐ
+    window.grid_rowconfigure(4, minsize=40) # status_label がある行
 
     window.mainloop()
 
