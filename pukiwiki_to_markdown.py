@@ -68,8 +68,10 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     """
     markdown_text = pukiwiki_text
 
-    # コメントを除去 (// から行末まで)
-    markdown_text = re.sub(r'//.*$', '', markdown_text, flags=re.MULTILINE)
+    # コメントを除去 (行頭または空白の後の // から行末まで)
+    # 以前の実装: markdown_text = re.sub(r'//.*$', '', markdown_text, flags=re.MULTILINE)
+    # URLのhttps://などが誤って削除されるのを防ぐため、行頭または空白の後の//のみをコメントとして扱う
+    markdown_text = re.sub(r'(^|\s)//.*$', r'\1', markdown_text, flags=re.MULTILINE)
 
     # 見出しの変換
     markdown_text = re.sub(r'^\*\*\*(.+)$', r'### \1', markdown_text, flags=re.MULTILINE)
