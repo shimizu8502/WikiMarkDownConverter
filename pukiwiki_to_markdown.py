@@ -79,6 +79,11 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     # リストの変換
     markdown_text = re.sub(r'^- (.+)$', r'- \1', markdown_text, flags=re.MULTILINE)
     markdown_text = re.sub(r'^\+ (.+)$', r'* \1', markdown_text, flags=re.MULTILINE) # PukiWikiの '+' リストは '*' に変換
+    
+    # ハイフンとテキストの間にスペースがない場合、スペースを追加
+    markdown_text = re.sub(r'^-([^ ].+)$', r'- \1', markdown_text, flags=re.MULTILINE)  # 単一ハイフン
+    markdown_text = re.sub(r'^--([^ ].+)$', r'-- \1', markdown_text, flags=re.MULTILINE)  # 二重ハイフン
+    markdown_text = re.sub(r'^---([^ ].+)$', r'---- \1', markdown_text, flags=re.MULTILINE)  # 三重ハイフン→四重ハイフン
 
     # 強調の変換
     markdown_text = re.sub(r"'''(.*?)'''", r'**\1**', markdown_text)
