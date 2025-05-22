@@ -314,6 +314,46 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None):
     print(result_message)
     messagebox.showinfo("処理完了", result_message)
 
+    # --- 変換されたMarkdownファイルを1つに連結してlogsディレクトリに保存 --- START
+    try:
+        if file_count > 0: # 変換されたファイルが1つ以上ある場合のみ実行
+            if not os.path.exists(LOG_DIR):
+                os.makedirs(LOG_DIR)
+            
+            today_str = datetime.datetime.now().strftime("%Y_%m_%d")
+            concatenated_filename = f"{today_str}_obsidian.md"
+            concatenated_filepath = os.path.join(LOG_DIR, concatenated_filename)
+            
+            all_markdown_content = []
+            # markdown_dir 内の .md ファイルをソートして取得 (順序をある程度一定にするため)
+            md_files = sorted([f for f in os.listdir(markdown_dir) if f.endswith('.md')])
+
+            for md_filename in md_files:
+                md_filepath = os.path.join(markdown_dir, md_filename)
+                try:
+                    with open(md_filepath, 'r', encoding='utf-8') as f_md:
+                        content = f_md.read()
+                    all_markdown_content.append(f"\n\n---\n## FILE: {md_filename}\n---\n\n{content}")
+                except Exception as e_read_md:
+                    error_message = f"連結用Markdownファイル '{md_filepath}' の読み込み中にエラー: {e_read_md}"
+                    print(error_message, file=sys.stderr)
+                    write_error_log(error_message)
+            
+            if all_markdown_content:
+                with open(concatenated_filepath, 'w', encoding='utf-8') as f_concat:
+                    f_concat.write("".join(all_markdown_content))
+                print(f"情報: 変換されたMarkdownファイルを連結し、'{concatenated_filepath}' に保存しました。")
+                messagebox.showinfo("追加処理完了", f"変換されたMarkdownファイルを連結し、\n'{concatenated_filepath}'\nに保存しました。")
+            else:
+                print("情報: 連結対象のMarkdownファイルが見つからなかったため、連結ファイルの作成はスキップされました。")
+
+    except Exception as e_concat:
+        error_message = f"Markdownファイルの連結処理中にエラーが発生しました: {e_concat}"
+        print(error_message, file=sys.stderr)
+        write_error_log(error_message)
+        messagebox.showerror("連結エラー", error_message)
+    # --- 変換されたMarkdownファイルを1つに連結してlogsディレクトリに保存 --- END
+
 
 def main_gui():
     """
