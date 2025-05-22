@@ -140,10 +140,63 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
                     header = table_lines[0]
                     header_cells = [cell.strip('~') for cell in header.strip('|').split('|')]
                     markdown_table = "| " + " | ".join(header_cells) + " |\n"
-                    markdown_table += "| " + " | ".join(['---'] * len(header_cells)) + " |\n"
+                    
+                    # 各列の配置を分析
+                    column_alignments = []
+                    for col_idx in range(len(header_cells)):
+                        col_alignment = "---"  # デフォルトは左揃え
+                        
+                        # 各行のセルを調べて配置を決定
+                        for row_idx in range(1, len(table_lines)):
+                            cells = table_lines[row_idx].strip('|').split('|')
+                            if col_idx < len(cells):
+                                cell_content = cells[col_idx].strip()
+                                # CENTER:, C: 指定の確認（中央揃え）
+                                if cell_content.startswith(('CENTER:', 'C:')):
+                                    col_alignment = ":---:"
+                                    break
+                                # RIGHT:, R: 指定の確認（右揃え）
+                                elif cell_content.startswith(('RIGHT:', 'R:')):
+                                    col_alignment = "---:"
+                                    break
+                                # LEFT:, L: 指定の確認（左揃え - 明示的に指定された場合）
+                                elif cell_content.startswith(('LEFT:', 'L:')):
+                                    col_alignment = ":---"
+                                    break
+                        
+                        column_alignments.append(col_alignment)
+                    
+                    # 区切り行の作成
+                    markdown_table += "| " + " | ".join(column_alignments) + " |\n"
+                    
+                    # データ行の処理
                     for row_line in table_lines[1:]:
-                        row_cells = [cell.strip('~') for cell in row_line.strip('|').split('|')]
+                        row_cells = []
+                        cells = row_line.strip('|').split('|')
+                        
+                        for i, cell in enumerate(cells):
+                            cell = cell.strip('~').strip()
+                            # 揃え指定を削除
+                            if cell.startswith(('CENTER:', 'C:')):
+                                if cell.startswith('CENTER:'):
+                                    cell = cell[7:].strip()
+                                else:  # C:
+                                    cell = cell[2:].strip()
+                            elif cell.startswith(('RIGHT:', 'R:')):
+                                if cell.startswith('RIGHT:'):
+                                    cell = cell[6:].strip()
+                                else:  # R:
+                                    cell = cell[2:].strip()
+                            elif cell.startswith(('LEFT:', 'L:')):
+                                if cell.startswith('LEFT:'):
+                                    cell = cell[5:].strip()
+                                else:  # L:
+                                    cell = cell[2:].strip()
+                            
+                            row_cells.append(cell)
+                        
                         markdown_table += "| " + " | ".join(row_cells) + " |\n"
+                    
                     other_lines.append("") # テーブルの前に改行を挿入
                     other_lines.append(markdown_table)
                 table_lines = []
@@ -154,15 +207,67 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
         header = table_lines[0]
         header_cells = [cell.strip('~') for cell in header.strip('|').split('|')]
         markdown_table = "| " + " | ".join(header_cells) + " |\n"
-        markdown_table += "| " + " | ".join(['---'] * len(header_cells)) + " |\n"
+        
+        # 各列の配置を分析
+        column_alignments = []
+        for col_idx in range(len(header_cells)):
+            col_alignment = "---"  # デフォルトは左揃え
+            
+            # 各行のセルを調べて配置を決定
+            for row_idx in range(1, len(table_lines)):
+                cells = table_lines[row_idx].strip('|').split('|')
+                if col_idx < len(cells):
+                    cell_content = cells[col_idx].strip()
+                    # CENTER:, C: 指定の確認（中央揃え）
+                    if cell_content.startswith(('CENTER:', 'C:')):
+                        col_alignment = ":---:"
+                        break
+                    # RIGHT:, R: 指定の確認（右揃え）
+                    elif cell_content.startswith(('RIGHT:', 'R:')):
+                        col_alignment = "---:"
+                        break
+                    # LEFT:, L: 指定の確認（左揃え - 明示的に指定された場合）
+                    elif cell_content.startswith(('LEFT:', 'L:')):
+                        col_alignment = ":---"
+                        break
+            
+            column_alignments.append(col_alignment)
+        
+        # 区切り行の作成
+        markdown_table += "| " + " | ".join(column_alignments) + " |\n"
+        
+        # データ行の処理
         for row_line in table_lines[1:]:
-            row_cells = [cell.strip('~') for cell in row_line.strip('|').split('|')]
+            row_cells = []
+            cells = row_line.strip('|').split('|')
+            
+            for i, cell in enumerate(cells):
+                cell = cell.strip('~').strip()
+                # 揃え指定を削除
+                if cell.startswith(('CENTER:', 'C:')):
+                    if cell.startswith('CENTER:'):
+                        cell = cell[7:].strip()
+                    else:  # C:
+                        cell = cell[2:].strip()
+                elif cell.startswith(('RIGHT:', 'R:')):
+                    if cell.startswith('RIGHT:'):
+                        cell = cell[6:].strip()
+                    else:  # R:
+                        cell = cell[2:].strip()
+                elif cell.startswith(('LEFT:', 'L:')):
+                    if cell.startswith('LEFT:'):
+                        cell = cell[5:].strip()
+                    else:  # L:
+                        cell = cell[2:].strip()
+                
+                row_cells.append(cell)
+            
             markdown_table += "| " + " | ".join(row_cells) + " |\n"
+        
         other_lines.append("") # テーブルの前に改行を挿入
         other_lines.append(markdown_table)
 
     markdown_text = "\n".join(other_lines)
-
 
     return markdown_text.strip()
 
