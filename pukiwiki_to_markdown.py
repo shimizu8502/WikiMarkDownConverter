@@ -144,6 +144,7 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
                     for row_line in table_lines[1:]:
                         row_cells = [cell.strip('~') for cell in row_line.strip('|').split('|')]
                         markdown_table += "| " + " | ".join(row_cells) + " |\n"
+                    other_lines.append("") # テーブルの前に改行を挿入
                     other_lines.append(markdown_table)
                 table_lines = []
                 is_table = False
@@ -157,6 +158,7 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
         for row_line in table_lines[1:]:
             row_cells = [cell.strip('~') for cell in row_line.strip('|').split('|')]
             markdown_table += "| " + " | ".join(row_cells) + " |\n"
+        other_lines.append("") # テーブルの前に改行を挿入
         other_lines.append(markdown_table)
 
     markdown_text = "\n".join(other_lines)
