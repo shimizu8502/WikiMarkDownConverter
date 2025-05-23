@@ -99,6 +99,10 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     # 画像の変換 #ref(画像URL,altテキスト) -> ![altテキスト](画像URL)
     markdown_text = re.sub(r'#ref\(([^,]+),?([^)]*)\)', r'![\2](\1)', markdown_text)
 
+    # 行頭のbr/BRを改行に変換
+    markdown_text = re.sub(r'^#br\s*$', '\n', markdown_text, flags=re.MULTILINE)
+    markdown_text = re.sub(r'^#BR\s*$', '\n', markdown_text, flags=re.MULTILINE)
+
     # 整形済みテキスト (行頭が半角スペース) の変換
     # 元のテキスト位置を保持しながら処理
     lines = markdown_text.split('\n')
@@ -245,20 +249,11 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
                     for cell in header_cells:
                         cell = cell.strip()
                         if cell.startswith(('CENTER:', 'C:')):
-                            if cell.startswith('CENTER:'):
-                                cell = cell[7:].strip()
-                            else:  # C:
-                                cell = cell[2:].strip()
+                            cell = cell[7:].strip()
                         elif cell.startswith(('RIGHT:', 'R:')):
-                            if cell.startswith('RIGHT:'):
-                                cell = cell[6:].strip()
-                            else:  # R:
-                                cell = cell[2:].strip()
+                            cell = cell[6:].strip()
                         elif cell.startswith(('LEFT:', 'L:')):
-                            if cell.startswith('LEFT:'):
-                                cell = cell[5:].strip()
-                            else:  # L:
-                                cell = cell[2:].strip()
+                            cell = cell[5:].strip()
                         cleaned_header_cells.append(cell)
                     
                     markdown_table = "| " + " | ".join(cleaned_header_cells) + " |\n"
