@@ -100,37 +100,34 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     markdown_text = re.sub(r'#ref\(([^,]+),?([^)]*)\)', r'![\2](\1)', markdown_text)
 
     # 整形済みテキスト (行頭が半角スペース) の変換
-    # 複数行の整形済みテキストを検出
-    preformatted_blocks = []
+    # 元のテキスト位置を保持しながら処理
     lines = markdown_text.split('\n')
+    processed_lines = []
     in_preformatted_block = False
     current_block = []
-    processed_lines = []
 
     for line in lines:
         if line.startswith(' '):
             if not in_preformatted_block:
                 in_preformatted_block = True
-            current_block.append(line[1:]) # 先頭のスペースを除去
+                current_block = []
+            current_block.append(line[1:])  # 先頭のスペースを除去
         else:
             if in_preformatted_block:
-                preformatted_blocks.append("\n".join(current_block))
+                # 整形済みテキストブロックの終了 - その場でコードブロックに変換
+                code_block = "```\n" + "\n".join(current_block) + "\n```"
+                processed_lines.append(code_block)
                 current_block = []
                 in_preformatted_block = False
             processed_lines.append(line)
 
-    if in_preformatted_block: # ファイル末尾が整形済みテキストの場合
-        preformatted_blocks.append("\n".join(current_block))
+    # ファイル末尾が整形済みテキストの場合
+    if in_preformatted_block:
+        code_block = "```\n" + "\n".join(current_block) + "\n```"
+        processed_lines.append(code_block)
 
-    # processed_lines を結合して整形済みテキスト部分を除いたテキストを再構築
+    # processed_lines を結合してテキストを再構築
     markdown_text = "\n".join(processed_lines)
-
-    # 検出した整形済みテキストブロックをコードブロックに変換して元の位置 (近似) に挿入
-    # 簡単のため、ここでは全ての整形済みテキストブロックをドキュメントの最後にまとめて追加
-    # TODO: 本来は元の位置に挿入するか、より高度な処理が必要
-    if preformatted_blocks:
-        for i, block in enumerate(preformatted_blocks):
-            markdown_text += f"\n```\n{block}\n```"
 
     # カンマ区切りテーブルの変換
     # 例: ,A,B,C や 空欄,A,B,C
