@@ -225,12 +225,16 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     markdown_text = "\n".join(csv_other_lines)
 
     # 表組みの変換 (簡易的な対応)
-    # |A|B|C| や |~A|~B|~C|
+    # |A|B|C| や |~A|~B|~C| や |A|B|C|h (ヘッダー行)
     table_lines = []
     other_lines = []
     is_table = False
     for line in markdown_text.split('\n'):
-        if line.startswith('|') and line.endswith('|'):
+        # |h で終わる行（ヘッダー行）や |で終わる行をテーブル行として認識
+        if line.startswith('|') and (line.endswith('|') or line.endswith('|h')):
+            # |h で終わる行は |h を除去してからテーブル行として追加
+            if line.endswith('|h'):
+                line = line[:-1]  # |h の h を除去して | で終わるようにする
             table_lines.append(line)
             is_table = True
         else:
@@ -238,30 +242,63 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
                 if table_lines:
                     header = table_lines[0]
                     header_cells = [cell.strip('~') for cell in header.strip('|').split('|')]
-                    markdown_table = "| " + " | ".join(header_cells) + " |\n"
+                    
+                    # CENTER:, C: などの揃え指定をヘッダーセルから除去
+                    cleaned_header_cells = []
+                    for cell in header_cells:
+                        cell = cell.strip()
+                        if cell.startswith(('CENTER:', 'C:')):
+                            if cell.startswith('CENTER:'):
+                                cell = cell[7:].strip()
+                            else:  # C:
+                                cell = cell[2:].strip()
+                        elif cell.startswith(('RIGHT:', 'R:')):
+                            if cell.startswith('RIGHT:'):
+                                cell = cell[6:].strip()
+                            else:  # R:
+                                cell = cell[2:].strip()
+                        elif cell.startswith(('LEFT:', 'L:')):
+                            if cell.startswith('LEFT:'):
+                                cell = cell[5:].strip()
+                            else:  # L:
+                                cell = cell[2:].strip()
+                        cleaned_header_cells.append(cell)
+                    
+                    markdown_table = "| " + " | ".join(cleaned_header_cells) + " |\n"
                     
                     # 各列の配置を分析
                     column_alignments = []
-                    for col_idx in range(len(header_cells)):
+                    for col_idx in range(len(cleaned_header_cells)):
                         col_alignment = "---"  # デフォルトは左揃え
                         
-                        # 各行のセルを調べて配置を決定
-                        for row_idx in range(1, len(table_lines)):
-                            cells = table_lines[row_idx].strip('|').split('|')
-                            if col_idx < len(cells):
-                                cell_content = cells[col_idx].strip()
-                                # CENTER:, C: 指定の確認（中央揃え）
-                                if cell_content.startswith(('CENTER:', 'C:')):
-                                    col_alignment = ":---:"
-                                    break
-                                # RIGHT:, R: 指定の確認（右揃え）
-                                elif cell_content.startswith(('RIGHT:', 'R:')):
-                                    col_alignment = "---:"
-                                    break
-                                # LEFT:, L: 指定の確認（左揃え - 明示的に指定された場合）
-                                elif cell_content.startswith(('LEFT:', 'L:')):
-                                    col_alignment = ":---"
-                                    break
+                        # ヘッダー行から配置情報を取得
+                        if col_idx < len(header_cells):
+                            original_cell = header_cells[col_idx].strip()
+                            if original_cell.startswith(('CENTER:', 'C:')):
+                                col_alignment = ":---:"
+                            elif original_cell.startswith(('RIGHT:', 'R:')):
+                                col_alignment = "---:"
+                            elif original_cell.startswith(('LEFT:', 'L:')):
+                                col_alignment = ":---"
+                        
+                        # データ行からも配置情報を確認（ヘッダーで指定されていない場合）
+                        if col_alignment == "---":
+                            for row_idx in range(1, len(table_lines)):
+                                cells = table_lines[row_idx].strip('|').split('|')
+                                if col_idx < len(cells):
+                                    cell_content = cells[col_idx].strip()
+                                    # CENTER:, C: 指定の確認（中央揃え）
+                                    if cell_content.startswith(('CENTER:', 'C:')):
+                                        col_alignment = ":---:"
+                                        break
+                                    # RIGHT:, R: 指定の確認（右揃え）
+                                    elif cell_content.startswith(('RIGHT:', 'R:')):
+                                        col_alignment = "---:"
+                                        break
+                                    # LEFT:, L: 指定の確認（左揃え - 明示的に指定された場合）
+                                    elif cell_content.startswith(('LEFT:', 'L:')):
+                                        col_alignment = ":---"
+                                        break
                         
                         column_alignments.append(col_alignment)
                     
@@ -305,30 +342,63 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     if is_table and table_lines: # ファイル末尾が表の場合
         header = table_lines[0]
         header_cells = [cell.strip('~') for cell in header.strip('|').split('|')]
-        markdown_table = "| " + " | ".join(header_cells) + " |\n"
+        
+        # CENTER:, C: などの揃え指定をヘッダーセルから除去
+        cleaned_header_cells = []
+        for cell in header_cells:
+            cell = cell.strip()
+            if cell.startswith(('CENTER:', 'C:')):
+                if cell.startswith('CENTER:'):
+                    cell = cell[7:].strip()
+                else:  # C:
+                    cell = cell[2:].strip()
+            elif cell.startswith(('RIGHT:', 'R:')):
+                if cell.startswith('RIGHT:'):
+                    cell = cell[6:].strip()
+                else:  # R:
+                    cell = cell[2:].strip()
+            elif cell.startswith(('LEFT:', 'L:')):
+                if cell.startswith('LEFT:'):
+                    cell = cell[5:].strip()
+                else:  # L:
+                    cell = cell[2:].strip()
+            cleaned_header_cells.append(cell)
+        
+        markdown_table = "| " + " | ".join(cleaned_header_cells) + " |\n"
         
         # 各列の配置を分析
         column_alignments = []
-        for col_idx in range(len(header_cells)):
+        for col_idx in range(len(cleaned_header_cells)):
             col_alignment = "---"  # デフォルトは左揃え
             
-            # 各行のセルを調べて配置を決定
-            for row_idx in range(1, len(table_lines)):
-                cells = table_lines[row_idx].strip('|').split('|')
-                if col_idx < len(cells):
-                    cell_content = cells[col_idx].strip()
-                    # CENTER:, C: 指定の確認（中央揃え）
-                    if cell_content.startswith(('CENTER:', 'C:')):
-                        col_alignment = ":---:"
-                        break
-                    # RIGHT:, R: 指定の確認（右揃え）
-                    elif cell_content.startswith(('RIGHT:', 'R:')):
-                        col_alignment = "---:"
-                        break
-                    # LEFT:, L: 指定の確認（左揃え - 明示的に指定された場合）
-                    elif cell_content.startswith(('LEFT:', 'L:')):
-                        col_alignment = ":---"
-                        break
+            # ヘッダー行から配置情報を取得
+            if col_idx < len(header_cells):
+                original_cell = header_cells[col_idx].strip()
+                if original_cell.startswith(('CENTER:', 'C:')):
+                    col_alignment = ":---:"
+                elif original_cell.startswith(('RIGHT:', 'R:')):
+                    col_alignment = "---:"
+                elif original_cell.startswith(('LEFT:', 'L:')):
+                    col_alignment = ":---"
+            
+            # データ行からも配置情報を確認（ヘッダーで指定されていない場合）
+            if col_alignment == "---":
+                for row_idx in range(1, len(table_lines)):
+                    cells = table_lines[row_idx].strip('|').split('|')
+                    if col_idx < len(cells):
+                        cell_content = cells[col_idx].strip()
+                        # CENTER:, C: 指定の確認（中央揃え）
+                        if cell_content.startswith(('CENTER:', 'C:')):
+                            col_alignment = ":---:"
+                            break
+                        # RIGHT:, R: 指定の確認（右揃え）
+                        elif cell_content.startswith(('RIGHT:', 'R:')):
+                            col_alignment = "---:"
+                            break
+                        # LEFT:, L: 指定の確認（左揃え - 明示的に指定された場合）
+                        elif cell_content.startswith(('LEFT:', 'L:')):
+                            col_alignment = ":---"
+                            break
             
             column_alignments.append(col_alignment)
         
