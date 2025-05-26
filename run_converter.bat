@@ -2,43 +2,43 @@
 setlocal enabledelayedexpansion
 
 echo ====================================
-echo PukiWiki to Markdown Converter èµ·å‹•
+echo PukiWiki to Markdown Converter ‹N“®
 echo ====================================
 
-:: ä»®æƒ³ç’°å¢ƒãŒã‚ã‚Œã°æœ‰åŠ¹åŒ–
+:: ‰¼‘zŠÂ‹«‚ª‚ ‚ê‚Î—LŒø‰»
 if exist venv (
-    echo [æƒ…å ±] ä»®æƒ³ç’°å¢ƒã‚’æœ‰åŠ¹åŒ–ã—ã¦ã„ã¾ã™...
+    echo [î•ñ] ‰¼‘zŠÂ‹«‚ð—LŒø‰»‚µ‚Ä‚¢‚Ü‚·...
     call venv\Scripts\activate.bat
     if %errorlevel% neq 0 (
-        echo [è­¦å‘Š] ä»®æƒ³ç’°å¢ƒã®æœ‰åŠ¹åŒ–ã«å¤±æ•—ã—ã¾ã—ãŸã€‚ã‚°ãƒ­ãƒ¼ãƒãƒ«ç’°å¢ƒã‚’ä½¿ç”¨ã—ã¾ã™ã€‚
+        echo [Œx] ‰¼‘zŠÂ‹«‚Ì—LŒø‰»‚ÉŽ¸”s‚µ‚Ü‚µ‚½BƒOƒ[ƒoƒ‹ŠÂ‹«‚ðŽg—p‚µ‚Ü‚·B
     ) else (
-        echo [æƒ…å ±] ä»®æƒ³ç’°å¢ƒãŒæœ‰åŠ¹åŒ–ã•ã‚Œã¾ã—ãŸã€‚
+        echo [î•ñ] ‰¼‘zŠÂ‹«‚ª—LŒø‰»‚³‚ê‚Ü‚µ‚½B
     )
 )
 
-:: PythonãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã‚‹ã‹ç¢ºèª
+:: Python‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚é‚©Šm”F
 python --version > nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ã‚¨ãƒ©ãƒ¼] PythonãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã€‚
-    echo setup_environment.batã‚’å…ˆã«å®Ÿè¡Œã—ã¦ãã ã•ã„ã€‚
+    echo [ƒGƒ‰[] Python‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñB
+    echo setup_environment.bat‚ðæ‚ÉŽÀs‚µ‚Ä‚­‚¾‚³‚¢B
     pause
     exit /b 1
 )
 
-:: ãƒ¡ã‚¤ãƒ³ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã‚’å®Ÿè¡Œ
-echo [æƒ…å ±] PukiWiki to Markdown Converterã‚’èµ·å‹•ã—ã¦ã„ã¾ã™...
+:: ƒƒCƒ“ƒvƒƒOƒ‰ƒ€‚ðŽÀs
+echo [î•ñ] PukiWiki to Markdown Converter‚ð‹N“®‚µ‚Ä‚¢‚Ü‚·...
 echo.
 python pukiwiki_to_markdown.py
 if %errorlevel% neq 0 (
     echo.
-    echo [ã‚¨ãƒ©ãƒ¼] ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å®Ÿè¡Œä¸­ã«ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸã€‚
-    echo ã‚¨ãƒ©ãƒ¼ã‚³ãƒ¼ãƒ‰: %errorlevel%
+    echo [ƒGƒ‰[] ƒvƒƒOƒ‰ƒ€‚ÌŽÀs’†‚ÉƒGƒ‰[‚ª”­¶‚µ‚Ü‚µ‚½B
+    echo ƒGƒ‰[ƒR[ƒh: %errorlevel%
 ) else (
     echo.
-    echo [æƒ…å ±] ãƒ—ãƒ­ã‚°ãƒ©ãƒ ãŒæ­£å¸¸çµ‚äº†ã—ã¾ã—ãŸã€‚
+    echo [î•ñ] ƒvƒƒOƒ‰ƒ€‚ª³íI—¹‚µ‚Ü‚µ‚½B
 )
 
-:: ä»®æƒ³ç’°å¢ƒã‚’ä½¿ç”¨ã—ã¦ã„ãŸå ´åˆã¯ç„¡åŠ¹åŒ–
+:: ‰¼‘zŠÂ‹«‚ðŽg—p‚µ‚Ä‚¢‚½ê‡‚Í–³Œø‰»
 if exist venv (
     if defined VIRTUAL_ENV (
         call venv\Scripts\deactivate.bat
@@ -47,6 +47,6 @@ if exist venv (
 
 echo.
 echo ====================================
-echo çµ‚äº†ã™ã‚‹ã«ã¯ä½•ã‹ã‚­ãƒ¼ã‚’æŠ¼ã—ã¦ãã ã•ã„ã€‚
+echo I—¹‚·‚é‚É‚Í‰½‚©ƒL[‚ð‰Ÿ‚µ‚Ä‚­‚¾‚³‚¢B
 echo ====================================
 pause 

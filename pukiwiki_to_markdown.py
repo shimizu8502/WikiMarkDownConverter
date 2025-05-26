@@ -90,6 +90,10 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     # 強調の変換
     markdown_text = re.sub(r"'''(.*?)'''", r'**\1**', markdown_text)
     markdown_text = re.sub(r"''(.*?)''", r'*\1*', markdown_text)
+    
+    # 取り消し線の変換 (PukiWiki: %%text%% -> Obsidian: ~~text~~)
+    # 前後のスペースを削除して変換する
+    markdown_text = re.sub(r"%%(.+?)%%", lambda m: f'~~{m.group(1).strip()}~~', markdown_text)
 
     # リンクの変換 [[エイリアス>ページ名]] -> [[ページ名|エイリアス]] (Obsidian形式)
     markdown_text = re.sub(r'\[\[([^>\]]+)>([^\]]+)\]\]', r'[[\2|\1]]', markdown_text)
@@ -558,6 +562,24 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
             print(error_message, file=sys.stderr)
             write_error_log(error_message)
 
+        # Windowsの不正ファイル名文字を安全な文字に置換
+        # 不正な文字: < > : " | ? * および制御文字
+        # また、ファイル名に / が含まれる場合はディレクトリ区切り文字として認識されるため、全角スラッシュに置換
+        invalid_chars = '<>:"|?*'
+        for char in invalid_chars:
+            decoded_basename = decoded_basename.replace(char, '_')
+        
+        # スラッシュとバックスラッシュも安全な文字に置換
+        decoded_basename = decoded_basename.replace('/', '／')  # 全角スラッシュ
+        decoded_basename = decoded_basename.replace('\\', '￥')  # 全角円記号
+        
+        # 制御文字の除去
+        decoded_basename = ''.join(char for char in decoded_basename if ord(char) >= 32)
+        
+        # ファイル名が空になった場合のフォールバック
+        if not decoded_basename.strip():
+            decoded_basename = original_basename
+
         markdown_filename = decoded_basename + '.md'
         markdown_filepath = os.path.join(markdown_dir, markdown_filename)
 
@@ -591,13 +613,19 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
             processed_count += 1
             if progress_bar:
                 progress_bar["value"] = processed_count
+                # プログレス情報更新関数が存在する場合は呼び出し
+                if hasattr(progress_bar, 'update_progress_info'):
+                    progress_bar.update_progress_info(processed_count, total_files)
             if status_var:
-                status_var.set(f"処理中: {filename} ({processed_count}/{total_files})")
+                status_var.set(f"🔄 処理中: {filename} ({processed_count}/{total_files})")
             if root_window:
                 root_window.update_idletasks()
 
     if status_var:
-        status_var.set(f"処理完了: {file_count} / {total_files} ファイルを変換しました。")
+        if error_count > 0:
+            status_var.set(f"⚠️ 処理完了: {file_count}/{total_files} ファイルを変換しました（{error_count} 件のエラー）")
+        else:
+            status_var.set(f"✅ 処理完了: {file_count}/{total_files} ファイルを変換しました")
 
     result_message = f"処理完了: {file_count} 個のファイルを変換しました。"
     if error_count > 0:
@@ -652,33 +680,86 @@ def main_gui():
     GUIアプリケーションのメイン処理
     """
     window = tk.Tk()
-    window.title("PukiWiki to Markdown Converter")
+    window.title("PukiWiki to Markdown Converter v1.2")
+    window.geometry("700x500")
+    window.minsize(600, 450)
+    
+    # ウィンドウを画面中央に配置
+    window.eval('tk::PlaceWindow . center')
+    
+    # アイコン設定（オプション）
+    try:
+        # window.iconbitmap('icon.ico')  # アイコンファイルがある場合
+        pass
+    except:
+        pass
+
+    # --- カラーパレットの定義 ---
+    colors = {
+        'bg_primary': '#f8f9fa',
+        'bg_secondary': '#ffffff', 
+        'bg_accent': '#007bff',
+        'text_primary': '#212529',
+        'text_secondary': '#6c757d',
+        'border': '#dee2e6',
+        'success': '#28a745',
+        'warning': '#ffc107'
+    }
+    
+    # メインウィンドウの背景色設定
+    window.configure(bg=colors['bg_primary'])
+
+    # --- フォント設定 ---
+    import tkinter.font as tkfont
+    try:
+        font_title = tkfont.Font(family="Yu Gothic UI", size=14, weight="bold")
+        font_label = tkfont.Font(family="Yu Gothic UI", size=10)
+        font_button = tkfont.Font(family="Yu Gothic UI", size=10, weight="bold")
+        font_status = tkfont.Font(family="Yu Gothic UI", size=9)
+    except:
+        # フォントが利用できない場合のフォールバック
+        font_title = tkfont.Font(size=14, weight="bold")
+        font_label = tkfont.Font(size=10)
+        font_button = tkfont.Font(size=10, weight="bold")
+        font_status = tkfont.Font(size=9)
 
     # --- スタイルの設定 ---
     style = ttk.Style()
-    # 利用可能なテーマを確認 (例: 'clam', 'alt', 'default', 'classic')
-    # print(style.theme_names()) 
-    # style.theme_use('clam') # Windowsでは 'vista', 'xpnative' なども利用可能
+    
+    # 利用可能なテーマを確認して設定
     if 'vista' in style.theme_names():
         style.theme_use('vista')
     elif 'clam' in style.theme_names():
         style.theme_use('clam')
+    
+    # カスタムスタイルの設定
+    style.configure('Title.TLabel', font=font_title, foreground=colors['text_primary'])
+    style.configure('Heading.TLabel', font=font_label, foreground=colors['text_primary'], background=colors['bg_primary'])
+    style.configure('Custom.TButton', font=font_button, padding=(10, 8))
+    style.configure('Action.TButton', font=font_button, padding=(15, 10))
+    style.configure('Status.TLabel', font=font_status, foreground=colors['text_secondary'], background=colors['bg_primary'])
+    
+    # プログレスバーのスタイル
+    style.configure('Custom.Horizontal.TProgressbar', 
+                   troughcolor=colors['border'], 
+                   borderwidth=1, 
+                   lightcolor=colors['success'], 
+                   darkcolor=colors['success'],
+                   thickness=20)
 
-
-    # --- 設定の読み込み --- START
+    # --- 設定の読み込み ---
     initial_pukiwiki_dir, initial_markdown_dir, initial_encoding = load_settings()
     pukiwiki_dir_var = tk.StringVar(value=initial_pukiwiki_dir)
     markdown_dir_var = tk.StringVar(value=initial_markdown_dir)
     encoding_var = tk.StringVar(value=initial_encoding)
-    # --- 設定の読み込み --- END
 
     def select_pukiwiki_dir():
-        dir_path = filedialog.askdirectory()
+        dir_path = filedialog.askdirectory(title="PukiWikiデータディレクトリを選択")
         if dir_path:
             pukiwiki_dir_var.set(dir_path)
 
     def select_markdown_dir():
-        dir_path = filedialog.askdirectory()
+        dir_path = filedialog.askdirectory(title="Markdown出力ディレクトリを選択") 
         if dir_path:
             markdown_dir_var.set(dir_path)
 
@@ -686,62 +767,134 @@ def main_gui():
         p_dir = pukiwiki_dir_var.get()
         m_dir = markdown_dir_var.get()
         enc = encoding_var.get()
-        # --- 設定の保存 (変換実行時) --- START
+        
+        # エンコーディング値の正規化
+        if enc == "auto (自動判別)":
+            enc = "auto"
+        
         save_settings(p_dir, m_dir, enc)
-        # --- 設定の保存 (変換実行時) --- END
         specified_enc = enc if enc != "auto" else None
-        # プログレスバーとステータスバーを渡す
         process_conversion(p_dir, m_dir, specified_enc, progress_bar, status_var, window)
 
+    # --- メインコンテナフレーム ---
+    main_frame = ttk.Frame(window, padding="20 20 20 10")
+    main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    
+    # ウィンドウのサイズ変更に対応
+    window.grid_rowconfigure(0, weight=1)
+    window.grid_columnconfigure(0, weight=1)
+    main_frame.grid_rowconfigure(6, weight=1)  # プログレスエリアの行を拡張可能に
+    main_frame.grid_columnconfigure(1, weight=1)
+
+    # --- タイトル ---
+    title_label = ttk.Label(main_frame, text="📝 PukiWiki to Markdown Converter", style='Title.TLabel')
+    title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20), sticky="ew")
+
+    # --- 入力ディレクトリ選択セクション ---
+    input_frame = ttk.LabelFrame(main_frame, text=" 📁 入力設定 ", padding="15 10 15 15")
+    input_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 15))
+    input_frame.grid_columnconfigure(1, weight=1)
+
     # PukiWikiディレクトリ選択
-    tk.Label(window, text="PukiWikiデータディレクトリ:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-    ttk.Entry(window, textvariable=pukiwiki_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-    ttk.Button(window, text="選択", command=select_pukiwiki_dir).grid(row=0, column=2, padx=5, pady=5)
+    ttk.Label(input_frame, text="PukiWikiデータディレクトリ:", style='Heading.TLabel').grid(row=0, column=0, padx=(0, 10), pady=(0, 8), sticky="w")
+    pukiwiki_entry = ttk.Entry(input_frame, textvariable=pukiwiki_dir_var, font=font_label)
+    pukiwiki_entry.grid(row=0, column=1, padx=(0, 10), pady=(0, 8), sticky="ew")
+    ttk.Button(input_frame, text="📂 選択", command=select_pukiwiki_dir, style='Custom.TButton').grid(row=0, column=2, pady=(0, 8))
 
-    # Markdown出力ディレクトリ選択
-    tk.Label(window, text="Markdown出力ディレクトリ:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-    ttk.Entry(window, textvariable=markdown_dir_var, width=50).grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-    ttk.Button(window, text="選択", command=select_markdown_dir).grid(row=1, column=2, padx=5, pady=5)
+    # Markdown出力ディレクトリ選択  
+    ttk.Label(input_frame, text="Markdown出力ディレクトリ:", style='Heading.TLabel').grid(row=1, column=0, padx=(0, 10), pady=(0, 8), sticky="w")
+    markdown_entry = ttk.Entry(input_frame, textvariable=markdown_dir_var, font=font_label)
+    markdown_entry.grid(row=1, column=1, padx=(0, 10), pady=(0, 8), sticky="ew")
+    ttk.Button(input_frame, text="📂 選択", command=select_markdown_dir, style='Custom.TButton').grid(row=1, column=2, pady=(0, 8))
 
-    # 文字コード指定 (オプション)
-    tk.Label(window, text="入力文字コード:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-    encoding_options = ["auto", "utf-8", "euc-jp", "shift_jis"]
-    # tk.OptionMenu を ttk.OptionMenu に変更 (ただし、ttk.OptionMenuは少し使い勝手が異なる場合がある)
-    # ttk.Combobox の方がより一般的で柔軟性がある
-    encoding_combo = ttk.Combobox(window, textvariable=encoding_var, values=encoding_options, state="readonly")
-    encoding_combo.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
-    encoding_combo.set(initial_encoding if initial_encoding in encoding_options else "auto")
+    # 文字コード指定
+    ttk.Label(input_frame, text="入力文字コード:", style='Heading.TLabel').grid(row=2, column=0, padx=(0, 10), sticky="w")
+    encoding_options = ["auto (自動判別)", "utf-8", "euc-jp", "shift_jis"]
+    encoding_combo = ttk.Combobox(input_frame, textvariable=encoding_var, values=encoding_options, state="readonly", font=font_label, width=20)
+    encoding_combo.grid(row=2, column=1, padx=(0, 10), sticky="w")
+    
+    # エンコーディング設定の初期化
+    if initial_encoding == "auto":
+        encoding_combo.set("auto (自動判別)")
+        encoding_var.set("auto")  # 内部変数は"auto"に設定
+    else:
+        if initial_encoding in ["utf-8", "euc-jp", "shift_jis"]:
+            encoding_combo.set(initial_encoding)
+            encoding_var.set(initial_encoding)
+        else:
+            encoding_combo.set("auto (自動判別)")
+            encoding_var.set("auto")
+    
+    # エンコーディング変数の更新処理
+    def update_encoding(*args):
+        selected = encoding_combo.get()
+        if selected == "auto (自動判別)":
+            encoding_var.set("auto")
+        else:
+            encoding_var.set(selected)
+    
+    encoding_combo.bind('<<ComboboxSelected>>', update_encoding)
 
+    # --- 実行ボタンセクション ---
+    action_frame = ttk.Frame(main_frame, padding="0 15 0 15")
+    action_frame.grid(row=2, column=0, columnspan=3, pady=(10, 20))
+    
+    convert_button = ttk.Button(action_frame, text="🚀 変換実行", command=start_conversion, style='Action.TButton')
+    convert_button.pack()
 
-    # 実行ボタン
-    ttk.Button(window, text="変換実行", command=start_conversion, width=15).grid(row=3, column=0, columnspan=3, padx=5, pady=10)
+    # --- プログレスセクション ---
+    progress_frame = ttk.LabelFrame(main_frame, text=" 📊 処理状況 ", padding="15 10 15 15")
+    progress_frame.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+    progress_frame.grid_columnconfigure(0, weight=1)
 
-    # --- プログレスバーとステータス表示 --- START
+    # ステータス表示
     status_var = tk.StringVar()
-    status_label = ttk.Label(window, textvariable=status_var, wraplength=500)
-    status_label.grid(row=4, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-    status_var.set("準備完了")
+    status_label = ttk.Label(progress_frame, textvariable=status_var, style='Status.TLabel', wraplength=600)
+    status_label.grid(row=0, column=0, pady=(0, 10), sticky="ew")
+    status_var.set("🟢 準備完了 - ディレクトリを選択して変換を開始してください")
 
-    progress_bar = ttk.Progressbar(window, orient="horizontal", length=500, mode="determinate")
-    progress_bar.grid(row=5, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-    # --- プログレスバーとステータス表示 --- END
+    # プログレスバー
+    progress_bar = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate", style='Custom.Horizontal.TProgressbar')
+    progress_bar.grid(row=1, column=0, sticky="ew", pady=(0, 5))
+    
+    # プログレス情報ラベル
+    progress_info_var = tk.StringVar()
+    progress_info_label = ttk.Label(progress_frame, textvariable=progress_info_var, style='Status.TLabel')
+    progress_info_label.grid(row=2, column=0, sticky="ew")
+    progress_info_var.set("")
 
+    # --- フッター情報 ---
+    footer_frame = ttk.Frame(main_frame, padding="0 10 0 0")
+    footer_frame.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(15, 0))
+    
+    info_text = "💡 ヒント: 変換されたファイルはObsidian互換のMarkdown形式で出力されます"
+    ttk.Label(footer_frame, text=info_text, style='Status.TLabel').pack()
 
-    # --- ウィンドウクローズ時の設定保存 --- START
+    # --- ウィンドウクローズ時の設定保存 ---
     def on_closing():
         p_dir = pukiwiki_dir_var.get()
         m_dir = markdown_dir_var.get()
         enc = encoding_var.get()
+        
+        # エンコーディング値の正規化
+        if enc == "auto (自動判別)":
+            enc = "auto"
+            
         save_settings(p_dir, m_dir, enc)
         window.destroy()
 
     window.protocol("WM_DELETE_WINDOW", on_closing)
-    # --- ウィンドウクローズ時の設定保存 --- END
+
+    # プログレス情報更新関数をグローバルに設定
+    def update_progress_info(current, total):
+        if total > 0:
+            percentage = int((current / total) * 100)
+            progress_info_var.set(f"進捗: {current}/{total} ファイル ({percentage}%)")
+        else:
+            progress_info_var.set("")
     
-    # グリッドの列の重み付けを設定して、ウィンドウリサイズ時に中央の要素が広がるようにする
-    window.grid_columnconfigure(1, weight=1)
-    # ステータスラベル行の最小の高さを設定して、縦方向のサイズ変動を防ぐ
-    window.grid_rowconfigure(4, minsize=40) # status_label がある行
+    # プログレス情報更新関数を progress_bar に関連付け
+    progress_bar.update_progress_info = update_progress_info
 
     window.mainloop()
 

@@ -2,44 +2,44 @@
 setlocal enabledelayedexpansion
 
 echo ====================================
-echo PukiWiki to Markdown Converter ã‚»ãƒƒãƒˆã‚¢ãƒƒãƒ—
+echo PukiWiki to Markdown Converter ƒZƒbƒgƒAƒbƒv
 echo ====================================
 
-:: PythonãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã‚‹ã‹ç¢ºèª
+:: Python‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚é‚©Šm”F
 python --version > nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ã‚¨ãƒ©ãƒ¼] PythonãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“ã€‚
-    echo Python 3.xã‚’https://www.python.org/downloads/ã‹ã‚‰ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã—ã¦ãã ã•ã„ã€‚
+    echo [ƒGƒ‰[] Python‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñB
+    echo Python 3.x‚ðhttps://www.python.org/downloads/‚©‚çƒCƒ“ƒXƒg[ƒ‹‚µ‚Ä‚­‚¾‚³‚¢B
     pause
     exit /b 1
 )
 
-:: Pythonã®ãƒãƒ¼ã‚¸ãƒ§ãƒ³ã‚’ç¢ºèª
+:: Python‚Ìƒo[ƒWƒ‡ƒ“‚ðŠm”F
 for /f "tokens=2" %%a in ('python --version 2^>^&1') do set "python_version=%%a"
-echo [æƒ…å ±] Python %python_version% ãŒæ¤œå‡ºã•ã‚Œã¾ã—ãŸã€‚
+echo [î•ñ] Python %python_version% ‚ªŒŸo‚³‚ê‚Ü‚µ‚½B
 
-:: ä»®æƒ³ç’°å¢ƒã®ä½œæˆï¼ˆã‚ªãƒ—ã‚·ãƒ§ãƒ³ï¼‰
+:: ‰¼‘zŠÂ‹«‚Ìì¬iƒIƒvƒVƒ‡ƒ“j
 if exist venv (
-    echo [æƒ…å ±] æ—¢å­˜ã®ä»®æƒ³ç’°å¢ƒãŒè¦‹ã¤ã‹ã‚Šã¾ã—ãŸã€‚
+    echo [î•ñ] Šù‘¶‚Ì‰¼‘zŠÂ‹«‚ªŒ©‚Â‚©‚è‚Ü‚µ‚½B
 ) else (
-    echo [æƒ…å ±] ä»®æƒ³ç’°å¢ƒã‚’ä½œæˆã—ã¦ã„ã¾ã™...
+    echo [î•ñ] ‰¼‘zŠÂ‹«‚ðì¬‚µ‚Ä‚¢‚Ü‚·...
     python -m venv venv
     if %errorlevel% neq 0 (
-        echo [è­¦å‘Š] ä»®æƒ³ç’°å¢ƒã®ä½œæˆã«å¤±æ•—ã—ã¾ã—ãŸã€‚ã‚°ãƒ­ãƒ¼ãƒãƒ«ç’°å¢ƒã‚’ä½¿ç”¨ã—ã¾ã™ã€‚
+        echo [Œx] ‰¼‘zŠÂ‹«‚Ìì¬‚ÉŽ¸”s‚µ‚Ü‚µ‚½BƒOƒ[ƒoƒ‹ŠÂ‹«‚ðŽg—p‚µ‚Ü‚·B
     ) else (
-        echo [æƒ…å ±] ä»®æƒ³ç’°å¢ƒãŒä½œæˆã•ã‚Œã¾ã—ãŸã€‚
+        echo [î•ñ] ‰¼‘zŠÂ‹«‚ªì¬‚³‚ê‚Ü‚µ‚½B
     )
 )
 
-:: å¿…è¦ãªãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã®ä½œæˆ
+:: •K—v‚ÈƒfƒBƒŒƒNƒgƒŠ‚Ìì¬
 if not exist logs (
     mkdir logs
-    echo [æƒ…å ±] ãƒ­ã‚°ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªã‚’ä½œæˆã—ã¾ã—ãŸã€‚
+    echo [î•ñ] ƒƒOƒfƒBƒŒƒNƒgƒŠ‚ðì¬‚µ‚Ü‚µ‚½B
 )
 
 echo.
 echo ====================================
-echo ã‚»ãƒƒãƒˆã‚¢ãƒƒãƒ—ãŒå®Œäº†ã—ã¾ã—ãŸï¼
-echo ã€Œrun_converter.batã€ã‚’å®Ÿè¡Œã—ã¦ã‚¢ãƒ—ãƒªã‚±ãƒ¼ã‚·ãƒ§ãƒ³ã‚’èµ·å‹•ã—ã¦ãã ã•ã„ã€‚
+echo ƒZƒbƒgƒAƒbƒv‚ªŠ®—¹‚µ‚Ü‚µ‚½I
+echo urun_converter.batv‚ðŽÀs‚µ‚ÄƒAƒvƒŠƒP[ƒVƒ‡ƒ“‚ð‹N“®‚µ‚Ä‚­‚¾‚³‚¢B
 echo ====================================
 pause 
