@@ -6,14 +6,25 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk # ttk をインポート
 import configparser # 設定ファイルの読み書き用
 import datetime # エラーログのタイムスタンプ用
+import json # タイムスタンプファイルの読み書き用
+import threading # 自動更新機能用
+import time # 自動更新機能用
 
 CONFIG_FILE = 'converter_settings.ini'
 CONFIG_SECTION = 'Paths'
 KEY_PUKIWIKI_DIR = 'PukiwikiDir'
 KEY_MARKDOWN_DIR = 'MarkdownDir'
 KEY_ENCODING = 'Encoding'
+KEY_CONVERSION_MODE = 'ConversionMode'  # 追加: 変換モード（全変換/更新変換）
+KEY_AUTO_UPDATE = 'AutoUpdate'  # 追加: 自動更新の有効/無効
+KEY_UPDATE_INTERVAL = 'UpdateInterval'  # 追加: 更新間隔（分）
 ERROR_LOG_FILE = 'conversion_errors.log' # エラーログファイル名
 LOG_DIR = 'logs' # エラーログを保存するディレクトリ
+TIMESTAMP_FILE = 'timestamps.md' # タイムスタンプファイル名
+
+# 自動更新用のグローバル変数
+auto_update_timer = None
+auto_update_running = False
 
 def write_error_log(message):
     """エラーメッセージをタイムスタンプ付きでログファイルに書き込みます。"""
@@ -34,13 +45,16 @@ def write_error_log(message):
         print(f"ログ書き込み中に予期しないエラーが発生しました: {e}", file=sys.stderr)
         print(f"元のエラーメッセージ: {message}", file=sys.stderr)
 
-def save_settings(pukiwiki_dir, markdown_dir, encoding):
+def save_settings(pukiwiki_dir, markdown_dir, encoding, conversion_mode='full', auto_update=False, update_interval=60):
     """選択されたディレクトリとエンコーディング設定をINIファイルに保存します。"""
     config = configparser.ConfigParser()
     config[CONFIG_SECTION] = {
         KEY_PUKIWIKI_DIR: pukiwiki_dir,
         KEY_MARKDOWN_DIR: markdown_dir,
-        KEY_ENCODING: encoding
+        KEY_ENCODING: encoding,
+        KEY_CONVERSION_MODE: conversion_mode,
+        KEY_AUTO_UPDATE: str(auto_update),
+        KEY_UPDATE_INTERVAL: str(update_interval)
     }
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as configfile:
@@ -57,10 +71,13 @@ def load_settings():
             pukiwiki_dir = config.get(CONFIG_SECTION, KEY_PUKIWIKI_DIR, fallback='')
             markdown_dir = config.get(CONFIG_SECTION, KEY_MARKDOWN_DIR, fallback='')
             encoding = config.get(CONFIG_SECTION, KEY_ENCODING, fallback='auto')
-            return pukiwiki_dir, markdown_dir, encoding
+            conversion_mode = config.get(CONFIG_SECTION, KEY_CONVERSION_MODE, fallback='full')
+            auto_update = config.getboolean(CONFIG_SECTION, KEY_AUTO_UPDATE, fallback=False)
+            update_interval = config.getint(CONFIG_SECTION, KEY_UPDATE_INTERVAL, fallback=60)
+            return pukiwiki_dir, markdown_dir, encoding, conversion_mode, auto_update, update_interval
         except (configparser.Error, IOError) as e:
             print(f"設定ファイルの読み込み中にエラーが発生しました: {e}", file=sys.stderr)
-    return '', '', 'auto' # デフォルト値
+    return '', '', 'auto', 'full', False, 60 # デフォルト値
 
 def convert_pukiwiki_to_markdown(pukiwiki_text):
     """
@@ -436,6 +453,96 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
 
     return markdown_text.strip()
 
+def get_timestamp_file_path(markdown_dir):
+    """タイムスタンプファイルのパスを取得します。"""
+    return os.path.join(markdown_dir, TIMESTAMP_FILE)
+
+def save_timestamps(pukiwiki_dir, markdown_dir):
+    """PukiWikiディレクトリの全ファイルのタイムスタンプをMarkdownディレクトリのタイムスタンプファイルに保存します。"""
+    timestamps = {}
+    
+    try:
+        for filename in os.listdir(pukiwiki_dir):
+            filepath = os.path.join(pukiwiki_dir, filename)
+            if os.path.isfile(filepath) and (filename.endswith('.txt') or filename.endswith('.page')):
+                # ファイルの最終更新時刻を取得
+                mtime = os.path.getmtime(filepath)
+                timestamps[filename] = mtime
+        
+        # タイムスタンプファイルに保存
+        timestamp_file_path = get_timestamp_file_path(markdown_dir)
+        
+        # Markdownファイル形式で保存
+        with open(timestamp_file_path, 'w', encoding='utf-8') as f:
+            f.write("# PukiWiki Files Timestamp Record\n\n")
+            f.write(f"生成日時: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write("## ファイルタイムスタンプ一覧\n\n")
+            f.write("```json\n")
+            json.dump(timestamps, f, indent=2, ensure_ascii=False)
+            f.write("\n```\n")
+        
+        print(f"情報: タイムスタンプファイル '{timestamp_file_path}' を更新しました。({len(timestamps)} ファイル)")
+        return timestamps
+        
+    except Exception as e:
+        error_message = f"タイムスタンプファイルの保存中にエラーが発生しました: {e}"
+        print(error_message, file=sys.stderr)
+        write_error_log(error_message)
+        return {}
+
+def load_timestamps(markdown_dir):
+    """タイムスタンプファイルから前回のタイムスタンプを読み込みます。"""
+    timestamp_file_path = get_timestamp_file_path(markdown_dir)
+    
+    if not os.path.exists(timestamp_file_path):
+        print("情報: タイムスタンプファイルが存在しません。全変換を実行します。")
+        return {}
+    
+    try:
+        with open(timestamp_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # JSONデータの抽出（```json と ``` の間）
+        import re
+        json_match = re.search(r'```json\n(.*?)\n```', content, re.DOTALL)
+        if json_match:
+            json_content = json_match.group(1)
+            timestamps = json.loads(json_content)
+            print(f"情報: タイムスタンプファイルから {len(timestamps)} 件のタイムスタンプを読み込みました。")
+            return timestamps
+        else:
+            print("警告: タイムスタンプファイルからJSONデータを抽出できませんでした。")
+            return {}
+            
+    except Exception as e:
+        error_message = f"タイムスタンプファイルの読み込み中にエラーが発生しました: {e}"
+        print(error_message, file=sys.stderr)
+        write_error_log(error_message)
+        return {}
+
+def get_updated_files(pukiwiki_dir, markdown_dir):
+    """更新されたファイルのリストを取得します。"""
+    current_timestamps = {}
+    previous_timestamps = load_timestamps(markdown_dir)
+    updated_files = []
+    
+    # 現在のタイムスタンプを取得
+    for filename in os.listdir(pukiwiki_dir):
+        filepath = os.path.join(pukiwiki_dir, filename)
+        if os.path.isfile(filepath) and (filename.endswith('.txt') or filename.endswith('.page')):
+            mtime = os.path.getmtime(filepath)
+            current_timestamps[filename] = mtime
+            
+            # 前回のタイムスタンプと比較
+            if filename not in previous_timestamps or previous_timestamps[filename] != mtime:
+                updated_files.append(filename)
+    
+    print(f"情報: {len(updated_files)} 個のファイルが更新されています。")
+    if updated_files:
+        print(f"更新ファイル: {', '.join(updated_files[:5])}" + ("..." if len(updated_files) > 5 else ""))
+    
+    return updated_files
+
 def detect_encoding(file_path):
     """
     ファイルの文字コードを判定します。
@@ -451,12 +558,15 @@ def detect_encoding(file_path):
             continue
     return None # 判定できなかった場合
 
-def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, progress_bar=None, status_var=None, root_window=None):
+def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, progress_bar=None, status_var=None, root_window=None, conversion_mode='full', auto_update=False, update_interval=60):
     """
     PukiWikiからMarkdownへの変換処理を実行します。
     main()関数からロジックを分離。
     GUIの進捗表示ウィジェットを更新する機能を追加。
+    全変換/更新変換の機能を追加。
     """
+    global auto_update_timer, auto_update_running
+    
     if not pukiwiki_dir or not markdown_dir:
         messagebox.showerror("エラー", "PukiWikiディレクトリとMarkdown出力ディレクトリの両方を選択してください。")
         return
@@ -476,57 +586,77 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
         messagebox.showerror("エラー", f"出力先 '{markdown_dir}' はディレクトリではありません。")
         return
 
-    # --- 出力ディレクトリ内の既存 .md ファイルを削除 --- START
-    if os.path.exists(markdown_dir) and os.path.isdir(markdown_dir):
-        confirm_delete = messagebox.askyesno(
-            "確認",
-            f"出力ディレクトリ '{markdown_dir}' 内の既存の .md ファイルをすべて削除しますか？\n"
-            f"この操作は元に戻せません。"
-        )
-        if confirm_delete:
-            deleted_count = 0
-            errors_deleting = False
-            try:
-                for item in os.listdir(markdown_dir):
-                    if item.endswith('.md'):
-                        item_path = os.path.join(markdown_dir, item)
-                        try:
-                            os.remove(item_path)
-                            print(f"  削除しました: {item_path}")
-                            deleted_count += 1
-                        except OSError as e_remove:
-                            error_message = f"エラー: ファイル '{item_path}' の削除に失敗しました: {e_remove}"
-                            print(error_message, file=sys.stderr)
-                            write_error_log(error_message)
-                            errors_deleting = True
-                if deleted_count > 0:
-                    messagebox.showinfo("情報", f"{deleted_count}個の .md ファイルを削除しました。")
-                elif not errors_deleting:
-                    messagebox.showinfo("情報", "出力ディレクトリに削除対象の .md ファイルはありませんでした。")
-                if errors_deleting:
-                    messagebox.showwarning("警告", "一部の .md ファイルの削除中にエラーが発生しました。詳細はコンソールを確認してください。")
-            except Exception as e_list:
-                error_message = f"出力ディレクトリのファイル一覧取得中にエラー: {e_list}"
-                print(f"エラー: {error_message}", file=sys.stderr)
-                write_error_log(error_message)
-                messagebox.showerror("エラー", error_message)
-                return # ディレクトリ操作エラー時は処理中断
-        else:
-            messagebox.showinfo("情報", "既存の .md ファイルの削除はキャンセルされました。変換処理を続行します。")
-    # --- 出力ディレクトリ内の既存 .md ファイルを削除 --- END
+    # 処理対象ファイルの決定
+    if conversion_mode == 'full':
+        # 全変換モード：既存の .md ファイルを削除
+        if os.path.exists(markdown_dir) and os.path.isdir(markdown_dir):
+            confirm_delete = messagebox.askyesno(
+                "確認",
+                f"出力ディレクトリ '{markdown_dir}' 内の既存の .md ファイルをすべて削除しますか？\n"
+                f"この操作は元に戻せません。"
+            )
+            if confirm_delete:
+                deleted_count = 0
+                errors_deleting = False
+                try:
+                    for item in os.listdir(markdown_dir):
+                        if item.endswith('.md'):
+                            item_path = os.path.join(markdown_dir, item)
+                            try:
+                                os.remove(item_path)
+                                print(f"  削除しました: {item_path}")
+                                deleted_count += 1
+                            except OSError as e_remove:
+                                error_message = f"エラー: ファイル '{item_path}' の削除に失敗しました: {e_remove}"
+                                print(error_message, file=sys.stderr)
+                                write_error_log(error_message)
+                                errors_deleting = True
+                    if deleted_count > 0:
+                        messagebox.showinfo("情報", f"{deleted_count}個の .md ファイルを削除しました。")
+                    elif not errors_deleting:
+                        messagebox.showinfo("情報", "出力ディレクトリに削除対象の .md ファイルはありませんでした。")
+                    if errors_deleting:
+                        messagebox.showwarning("警告", "一部の .md ファイルの削除中にエラーが発生しました。詳細はコンソールを確認してください。")
+                except Exception as e_list:
+                    error_message = f"出力ディレクトリのファイル一覧取得中にエラー: {e_list}"
+                    print(f"エラー: {error_message}", file=sys.stderr)
+                    write_error_log(error_message)
+                    messagebox.showerror("エラー", error_message)
+                    return
+            else:
+                messagebox.showinfo("情報", "既存の .md ファイルの削除はキャンセルされました。変換処理を続行します。")
+        
+        # 全変換：すべてのファイルを処理対象とする
+        files_to_process = []
+        for filename in os.listdir(pukiwiki_dir):
+            pukiwiki_filepath = os.path.join(pukiwiki_dir, filename)
+            if os.path.isfile(pukiwiki_filepath) and (filename.endswith('.txt') or filename.endswith('.page')):
+                files_to_process.append(filename)
+        
+        print(f"処理開始（全変換）: PukiWikiディレクトリ '{pukiwiki_dir}' -> Markdownディレクトリ '{markdown_dir}'")
+        
+    else:
+        # 更新変換モード：更新されたファイルのみを処理対象とする
+        updated_files = get_updated_files(pukiwiki_dir, markdown_dir)
+        files_to_process = updated_files
+        
+        if not files_to_process:
+            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if status_var:
+                status_var.set(f"ℹ️ 更新されたファイルはありません [{current_time}]")
+            messagebox.showinfo("情報", f"更新されたファイルはありません。\n\n確認時刻: {current_time}")
+            
+            # 自動更新が有効な場合は次の更新をスケジュール
+            if auto_update and not auto_update_running:
+                schedule_auto_update(pukiwiki_dir, markdown_dir, specified_encoding, progress_bar, status_var, root_window, conversion_mode, auto_update, update_interval)
+            return
+        
+        print(f"処理開始（更新変換）: PukiWikiディレクトリ '{pukiwiki_dir}' -> Markdownディレクトリ '{markdown_dir}'")
 
-    print(f"処理開始: PukiWikiディレクトリ '{pukiwiki_dir}' -> Markdownディレクトリ '{markdown_dir}'")
+    print(f"処理対象ファイル数: {len(files_to_process)}")
     file_count = 0
     error_count = 0
-    # プログレス表示用のテキストエリアなどをGUIに追加することも検討できる
 
-    # 処理対象ファイルリストの取得
-    files_to_process = []
-    for filename in os.listdir(pukiwiki_dir):
-        pukiwiki_filepath = os.path.join(pukiwiki_dir, filename)
-        if os.path.isfile(pukiwiki_filepath) and (filename.endswith('.txt') or filename.endswith('.page')):
-            files_to_process.append(filename)
-    
     total_files = len(files_to_process)
     if progress_bar:
         progress_bar["maximum"] = total_files
@@ -534,9 +664,8 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
     
     processed_count = 0
 
-    for filename in files_to_process: # os.listdir(pukiwiki_dir)から変更
+    for filename in files_to_process:
         pukiwiki_filepath = os.path.join(pukiwiki_dir, filename)
-        # if os.path.isfile(pukiwiki_filepath) and (filename.endswith('.txt') or filename.endswith('.page')): # このチェックは上で実施済み
         original_basename, ext = os.path.splitext(filename)
         decoded_basename = original_basename
         try:
@@ -621,18 +750,28 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
             if root_window:
                 root_window.update_idletasks()
 
+    # タイムスタンプファイルの保存（全変換・更新変換ともに実施）
+    save_timestamps(pukiwiki_dir, markdown_dir)
+
+    # 処理終了時間を取得
+    end_time = datetime.datetime.now()
+    end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
     if status_var:
         if error_count > 0:
-            status_var.set(f"⚠️ 処理完了: {file_count}/{total_files} ファイルを変換しました（{error_count} 件のエラー）")
+            status_var.set(f"⚠️ 処理完了 [{end_time_str}]: {file_count}/{total_files} ファイルを変換しました（{error_count} 件のエラー）")
         else:
-            status_var.set(f"✅ 処理完了: {file_count}/{total_files} ファイルを変換しました")
+            status_var.set(f"✅ 処理完了 [{end_time_str}]: {file_count}/{total_files} ファイルを変換しました")
 
-    result_message = f"処理完了: {file_count} 個のファイルを変換しました。"
+    result_message = f"処理完了 [{end_time_str}]: {file_count} 個のファイルを変換しました。"
     if error_count > 0:
         result_message += f"\n注意: {error_count} 個のファイルでエラーが発生しました。"
         result_message += f"\nエラーの詳細は '{os.path.join(LOG_DIR, ERROR_LOG_FILE)}' を確認してください。"
     print(result_message)
-    messagebox.showinfo("処理完了", result_message)
+    
+    # 自動更新モードでない場合のみメッセージボックスを表示
+    if not auto_update:
+        messagebox.showinfo("処理完了", result_message)
 
     # --- 変換されたMarkdownファイルを1つに連結してlogsディレクトリに保存 --- START
     try:
@@ -646,7 +785,7 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
             
             all_markdown_content = []
             # markdown_dir 内の .md ファイルをソートして取得 (順序をある程度一定にするため)
-            md_files = sorted([f for f in os.listdir(markdown_dir) if f.endswith('.md')])
+            md_files = sorted([f for f in os.listdir(markdown_dir) if f.endswith('.md') and f != TIMESTAMP_FILE])
 
             for md_filename in md_files:
                 md_filepath = os.path.join(markdown_dir, md_filename)
@@ -663,7 +802,8 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
                 with open(concatenated_filepath, 'w', encoding='utf-8') as f_concat:
                     f_concat.write("".join(all_markdown_content))
                 print(f"情報: 変換されたMarkdownファイルを連結し、'{concatenated_filepath}' に保存しました。")
-                messagebox.showinfo("追加処理完了", f"変換されたMarkdownファイルを連結し、\n'{concatenated_filepath}'\nに保存しました。")
+                if not auto_update:
+                    messagebox.showinfo("追加処理完了", f"変換されたMarkdownファイルを連結し、\n'{concatenated_filepath}'\nに保存しました。\n\n処理完了時刻: {end_time_str}")
             else:
                 print("情報: 連結対象のMarkdownファイルが見つからなかったため、連結ファイルの作成はスキップされました。")
 
@@ -671,9 +811,50 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
         error_message = f"Markdownファイルの連結処理中にエラーが発生しました: {e_concat}"
         print(error_message, file=sys.stderr)
         write_error_log(error_message)
-        messagebox.showerror("連結エラー", error_message)
+        if not auto_update:
+            messagebox.showerror("連結エラー", error_message)
     # --- 変換されたMarkdownファイルを1つに連結してlogsディレクトリに保存 --- END
 
+    # 自動更新が有効で更新変換モードの場合、次の更新をスケジュール
+    if auto_update and conversion_mode == 'update':
+        schedule_auto_update(pukiwiki_dir, markdown_dir, specified_encoding, progress_bar, status_var, root_window, conversion_mode, auto_update, update_interval)
+
+def schedule_auto_update(pukiwiki_dir, markdown_dir, specified_encoding, progress_bar, status_var, root_window, conversion_mode, auto_update, update_interval):
+    """自動更新をスケジュールします。"""
+    global auto_update_timer, auto_update_running
+    
+    def auto_update_task():
+        global auto_update_running
+        auto_update_running = True
+        try:
+            if status_var:
+                status_var.set(f"🔄 自動更新実行中...")
+            process_conversion(pukiwiki_dir, markdown_dir, specified_encoding, progress_bar, status_var, root_window, conversion_mode, auto_update, update_interval)
+        finally:
+            auto_update_running = False
+    
+    # 次回実行予定時間を計算
+    next_run_time = datetime.datetime.now() + datetime.timedelta(minutes=update_interval)
+    next_run_str = next_run_time.strftime("%Y-%m-%d %H:%M:%S")
+    
+    if status_var:
+        status_var.set(f"⏰ 次回自動更新: {next_run_str} ({update_interval} 分後)")
+    
+    # 指定された分数後に自動更新を実行
+    auto_update_timer = threading.Timer(update_interval * 60, auto_update_task)
+    auto_update_timer.daemon = True
+    auto_update_timer.start()
+
+def stop_auto_update():
+    """自動更新を停止します。"""
+    global auto_update_timer, auto_update_running
+    
+    if auto_update_timer:
+        auto_update_timer.cancel()
+        auto_update_timer = None
+    
+    auto_update_running = False
+    print("情報: 自動更新が停止されました。")
 
 def main_gui():
     """
@@ -681,11 +862,11 @@ def main_gui():
     """
     window = tk.Tk()
     window.title("PukiWiki to Markdown Converter v1.2")
-    window.geometry("700x500")
-    window.minsize(600, 450)
+    window.geometry("750x650+100+100")  # +100+100で左上に配置
+    window.minsize(700, 600)
     
-    # ウィンドウを画面中央に配置
-    window.eval('tk::PlaceWindow . center')
+    # ウィンドウを左上に配置（上記のgeometryで設定済み）
+    # window.eval('tk::PlaceWindow . center')
     
     # アイコン設定（オプション）
     try:
@@ -739,6 +920,38 @@ def main_gui():
     style.configure('Action.TButton', font=font_button, padding=(15, 10))
     style.configure('Status.TLabel', font=font_status, foreground=colors['text_secondary'], background=colors['bg_primary'])
     
+    # 変換モード用の特別なスタイル
+    style.configure('FullMode.TRadiobutton', font=font_label, foreground='#dc3545', background=colors['bg_primary'])
+    style.configure('UpdateMode.TRadiobutton', font=font_label, foreground='#28a745', background=colors['bg_primary'])
+    style.configure('FullModeFrame.TFrame', relief='solid', borderwidth=2, background=colors['bg_secondary'])
+    style.configure('UpdateModeFrame.TFrame', relief='solid', borderwidth=2, background=colors['bg_secondary'])
+    
+    # フレーム選択時の強調スタイル
+    style.configure('FullModeSelected.TFrame', relief='solid', borderwidth=3, background='#f8d7da')  # 薄い赤背景
+    style.configure('UpdateModeSelected.TFrame', relief='solid', borderwidth=3, background='#d4edda')  # 薄い緑背景
+    
+    # 変換実行ボタンのモード別スタイル
+    style.configure('FullModeAction.TButton', font=font_button, padding=(15, 10), foreground='black')
+    style.configure('UpdateModeAction.TButton', font=font_button, padding=(15, 10), foreground='black')
+    
+    # ステータス表示のモード別スタイル
+    style.configure('FullModeStatus.TLabel', font=font_status, foreground='#dc3545', background=colors['bg_primary'])
+    style.configure('UpdateModeStatus.TLabel', font=font_status, foreground='#28a745', background=colors['bg_primary'])
+    
+    # 背景色の設定（プラットフォーム依存のため、可能な範囲で設定）
+    try:
+        style.map('FullModeAction.TButton', 
+                 background=[('active', '#c82333'), ('!active', '#dc3545')],
+                 foreground=[('active', 'black'), ('!active', 'black')])
+        style.map('UpdateModeAction.TButton', 
+                 background=[('active', '#218838'), ('!active', '#28a745')],
+                 foreground=[('active', 'black'), ('!active', 'black')])
+    except:
+        # 一部のプラットフォームで背景色設定が効かない場合のフォールバック
+        # より目立つ前景色に変更
+        style.configure('FullModeAction.TButton', font=font_button, padding=(15, 10), foreground='black')
+        style.configure('UpdateModeAction.TButton', font=font_button, padding=(15, 10), foreground='black')
+    
     # プログレスバーのスタイル
     style.configure('Custom.Horizontal.TProgressbar', 
                    troughcolor=colors['border'], 
@@ -748,33 +961,61 @@ def main_gui():
                    thickness=20)
 
     # --- 設定の読み込み ---
-    initial_pukiwiki_dir, initial_markdown_dir, initial_encoding = load_settings()
+    initial_pukiwiki_dir, initial_markdown_dir, initial_encoding, initial_conversion_mode, initial_auto_update, initial_update_interval = load_settings()
     pukiwiki_dir_var = tk.StringVar(value=initial_pukiwiki_dir)
     markdown_dir_var = tk.StringVar(value=initial_markdown_dir)
     encoding_var = tk.StringVar(value=initial_encoding)
+    conversion_mode_var = tk.StringVar(value=initial_conversion_mode)
+    auto_update_var = tk.StringVar(value=str(initial_auto_update))
+    update_interval_var = tk.StringVar(value=str(initial_update_interval))
 
     def select_pukiwiki_dir():
         dir_path = filedialog.askdirectory(title="PukiWikiデータディレクトリを選択")
         if dir_path:
             pukiwiki_dir_var.set(dir_path)
+            # 設定変更時に自動保存
+            save_current_settings()
 
     def select_markdown_dir():
         dir_path = filedialog.askdirectory(title="Markdown出力ディレクトリを選択") 
         if dir_path:
             markdown_dir_var.set(dir_path)
+            # 設定変更時に自動保存
+            save_current_settings()
+
+    def save_current_settings():
+        """現在の設定を保存します"""
+        try:
+            p_dir = pukiwiki_dir_var.get()
+            m_dir = markdown_dir_var.get()
+            enc = encoding_var.get()
+            conversion_mode = conversion_mode_var.get()
+            auto_update = auto_update_var.get() == "True"
+            update_interval = int(update_interval_var.get()) if update_interval_var.get().isdigit() else 60
+            
+            # エンコーディング値の正規化
+            if enc == "auto (自動判別)":
+                enc = "auto"
+                
+            save_settings(p_dir, m_dir, enc, conversion_mode, auto_update, update_interval)
+        except Exception as e:
+            print(f"設定保存中にエラーが発生しました: {e}", file=sys.stderr)
 
     def start_conversion():
         p_dir = pukiwiki_dir_var.get()
         m_dir = markdown_dir_var.get()
         enc = encoding_var.get()
+        conversion_mode = conversion_mode_var.get()
+        auto_update = auto_update_var.get() == "True"
+        update_interval = int(update_interval_var.get())
         
         # エンコーディング値の正規化
         if enc == "auto (自動判別)":
             enc = "auto"
         
-        save_settings(p_dir, m_dir, enc)
+        save_settings(p_dir, m_dir, enc, conversion_mode, auto_update, update_interval)
         specified_enc = enc if enc != "auto" else None
-        process_conversion(p_dir, m_dir, specified_enc, progress_bar, status_var, window)
+        process_conversion(p_dir, m_dir, specified_enc, progress_bar, status_var, window, conversion_mode, auto_update, update_interval)
 
     # --- メインコンテナフレーム ---
     main_frame = ttk.Frame(window, padding="20 20 20 10")
@@ -783,7 +1024,7 @@ def main_gui():
     # ウィンドウのサイズ変更に対応
     window.grid_rowconfigure(0, weight=1)
     window.grid_columnconfigure(0, weight=1)
-    main_frame.grid_rowconfigure(6, weight=1)  # プログレスエリアの行を拡張可能に
+    main_frame.grid_rowconfigure(7, weight=1)  # プログレスエリアの行を拡張可能に（行番号を更新）
     main_frame.grid_columnconfigure(1, weight=1)
 
     # --- タイトル ---
@@ -832,19 +1073,138 @@ def main_gui():
             encoding_var.set("auto")
         else:
             encoding_var.set(selected)
+        # 設定変更時に自動保存
+        save_current_settings()
     
     encoding_combo.bind('<<ComboboxSelected>>', update_encoding)
 
+    # --- 変換モード選択セクション ---
+    mode_frame = ttk.LabelFrame(main_frame, text=" ⚙️ 変換モード設定 ", padding="15 10 15 15")
+    mode_frame.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(0, 15))
+    mode_frame.grid_columnconfigure(1, weight=1)
+
+    # 変換モード選択（ラジオボタン）
+    ttk.Label(mode_frame, text="変換モード:", style='Heading.TLabel').grid(row=0, column=0, padx=(0, 10), pady=(0, 8), sticky="nw")
+    
+    mode_options_frame = ttk.Frame(mode_frame)
+    mode_options_frame.grid(row=0, column=1, columnspan=2, sticky="w", pady=(0, 8))
+    
+    # 全変換オプションフレーム（視覚的強調用）
+    full_mode_container = ttk.Frame(mode_options_frame, style='FullModeFrame.TFrame')
+    full_mode_container.pack(fill="x", pady=(0, 8), padx=5)
+    
+    full_conversion_radio = ttk.Radiobutton(full_mode_container, text="🔄 全変換（全ファイルを変換、既存mdファイル削除）", 
+                                          variable=conversion_mode_var, value="full", style='FullMode.TRadiobutton',
+                                          command=save_current_settings)
+    full_conversion_radio.pack(anchor="w", padx=10, pady=5)
+    
+    # 更新変換オプションフレーム（視覚的強調用）
+    update_mode_container = ttk.Frame(mode_options_frame, style='UpdateModeFrame.TFrame')
+    update_mode_container.pack(fill="x", padx=5)
+    
+    update_conversion_radio = ttk.Radiobutton(update_mode_container, text="📝 更新変換（更新されたファイルのみ変換）", 
+                                            variable=conversion_mode_var, value="update", style='UpdateMode.TRadiobutton',
+                                            command=save_current_settings)
+    update_conversion_radio.pack(anchor="w", padx=10, pady=5)
+
+    # 自動更新設定（更新変換選択時のみ有効）
+    auto_update_frame = ttk.Frame(mode_frame)
+    auto_update_frame.grid(row=1, column=1, columnspan=2, sticky="w", pady=(10, 0))
+    
+    auto_update_check = ttk.Checkbutton(auto_update_frame, text="🕒 自動更新", 
+                                       variable=auto_update_var, onvalue="True", offvalue="False",
+                                       command=save_current_settings)
+    auto_update_check.pack(side="left", padx=(20, 10))
+    
+    ttk.Label(auto_update_frame, text="更新間隔:", style='Heading.TLabel').pack(side="left", padx=(0, 5))
+    
+    def update_interval_changed(*args):
+        """更新間隔変更時の処理"""
+        save_current_settings()
+    
+    interval_spinbox = ttk.Spinbox(auto_update_frame, from_=1, to=1440, textvariable=update_interval_var, 
+                                  width=5, font=font_label, command=save_current_settings)
+    interval_spinbox.pack(side="left", padx=(0, 5))
+    
+    # SpinboxのTextVariable変更も監視
+    update_interval_var.trace('w', update_interval_changed)
+    
+    ttk.Label(auto_update_frame, text="分", style='Heading.TLabel').pack(side="left")
+
     # --- 実行ボタンセクション ---
     action_frame = ttk.Frame(main_frame, padding="0 15 0 15")
-    action_frame.grid(row=2, column=0, columnspan=3, pady=(10, 20))
+    action_frame.grid(row=3, column=0, columnspan=3, pady=(10, 20))
     
-    convert_button = ttk.Button(action_frame, text="🚀 変換実行", command=start_conversion, style='Action.TButton')
-    convert_button.pack()
+    # 変換実行ボタンと自動更新停止ボタンを横並びに配置
+    button_container = ttk.Frame(action_frame)
+    button_container.pack()
+    
+    convert_button = ttk.Button(button_container, text="🚀 変換実行", command=start_conversion, style='Action.TButton')
+    convert_button.pack(side="left", padx=(0, 10))
+    
+    def stop_auto_update_gui():
+        stop_auto_update()
+        if status_var:
+            status_var.set("🛑 自動更新が停止されました")
+        messagebox.showinfo("自動更新停止", "自動更新を停止しました。")
+    
+    stop_button = ttk.Button(button_container, text="🛑 自動更新停止", command=stop_auto_update_gui, style='Custom.TButton')
+    stop_button.pack(side="left")
+
+    # 変換モードに応じて自動更新設定の有効/無効を切り替える関数
+    def update_auto_update_state(*args):
+        mode = conversion_mode_var.get()
+        if mode == "update":
+            auto_update_check.configure(state="normal")
+            interval_spinbox.configure(state="normal")
+            # 更新変換選択時の視覚効果
+            update_mode_container.configure(style='UpdateModeSelected.TFrame')
+            full_mode_container.configure(style='FullModeFrame.TFrame')
+            # フレーム全体の色も変更
+            mode_frame.configure(text=" ⚙️ 変換モード設定 - 📝 更新変換選択中 ")
+            # 変換実行ボタンの更新
+            convert_button.configure(text="📝 更新変換実行", style='UpdateModeAction.TButton')
+        else:
+            auto_update_check.configure(state="disabled")
+            interval_spinbox.configure(state="disabled")
+            auto_update_var.set("False")  # 全変換モードでは自動更新を無効化
+            # 全変換選択時の視覚効果
+            full_mode_container.configure(style='FullModeSelected.TFrame')
+            update_mode_container.configure(style='UpdateModeFrame.TFrame')
+            # フレーム全体の色も変更
+            mode_frame.configure(text=" ⚙️ 変換モード設定 - 🔄 全変換選択中 ")
+            # 変換実行ボタンの更新
+            convert_button.configure(text="🔄 全変換実行", style='FullModeAction.TButton')
+        # 状態変更時に保存
+        save_current_settings()
+    
+    # 変換モード変更時のイベント
+    conversion_mode_var.trace('w', update_auto_update_state)
+    
+    # 初期設定の復元を改善
+    print(f"設定復元: 変換モード={initial_conversion_mode}, 自動更新={initial_auto_update}, 更新間隔={initial_update_interval}")
+    
+    # 変換モードの初期設定
+    if initial_conversion_mode in ["full", "update"]:
+        conversion_mode_var.set(initial_conversion_mode)
+    else:
+        conversion_mode_var.set("full")  # デフォルト値
+    
+    # 自動更新の初期設定
+    auto_update_var.set(str(initial_auto_update))
+    
+    # 更新間隔の初期設定
+    if isinstance(initial_update_interval, int) and 1 <= initial_update_interval <= 1440:
+        update_interval_var.set(str(initial_update_interval))
+    else:
+        update_interval_var.set("60")  # デフォルト値
+    
+    # 初期状態の設定
+    update_auto_update_state()
 
     # --- プログレスセクション ---
     progress_frame = ttk.LabelFrame(main_frame, text=" 📊 処理状況 ", padding="15 10 15 15")
-    progress_frame.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+    progress_frame.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(0, 10))
     progress_frame.grid_columnconfigure(0, weight=1)
 
     # ステータス表示
@@ -862,26 +1222,64 @@ def main_gui():
     progress_info_label = ttk.Label(progress_frame, textvariable=progress_info_var, style='Status.TLabel')
     progress_info_label.grid(row=2, column=0, sticky="ew")
     progress_info_var.set("")
+    
+    # ステータス表示の色を変換モードに応じて更新する関数（ラベル作成後に実行）
+    def update_status_colors():
+        mode = conversion_mode_var.get()
+        if mode == "update":
+            status_label.configure(style='UpdateModeStatus.TLabel')
+            progress_info_label.configure(style='UpdateModeStatus.TLabel')
+        else:
+            status_label.configure(style='FullModeStatus.TLabel')
+            progress_info_label.configure(style='FullModeStatus.TLabel')
+    
+    # 元の update_auto_update_state 関数にステータス色更新を追加
+    original_update_auto_update_state = update_auto_update_state
+    def enhanced_update_auto_update_state(*args):
+        original_update_auto_update_state(*args)
+        update_status_colors()
+    
+    # 変更されたイベントハンドラーを再設定
+    conversion_mode_var.trace_vdelete('w', conversion_mode_var.trace_info()[0][1])
+    conversion_mode_var.trace('w', enhanced_update_auto_update_state)
+    
+    # 初期色設定
+    update_status_colors()
 
     # --- フッター情報 ---
     footer_frame = ttk.Frame(main_frame, padding="0 10 0 0")
-    footer_frame.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(15, 0))
+    footer_frame.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(15, 0))
     
     info_text = "💡 ヒント: 変換されたファイルはObsidian互換のMarkdown形式で出力されます"
     ttk.Label(footer_frame, text=info_text, style='Status.TLabel').pack()
 
     # --- ウィンドウクローズ時の設定保存 ---
     def on_closing():
-        p_dir = pukiwiki_dir_var.get()
-        m_dir = markdown_dir_var.get()
-        enc = encoding_var.get()
-        
-        # エンコーディング値の正規化
-        if enc == "auto (自動判別)":
-            enc = "auto"
+        """ウィンドウクローズ時の処理"""
+        try:
+            # 自動更新を停止
+            stop_auto_update()
             
-        save_settings(p_dir, m_dir, enc)
-        window.destroy()
+            # 現在の設定を保存
+            p_dir = pukiwiki_dir_var.get()
+            m_dir = markdown_dir_var.get()
+            enc = encoding_var.get()
+            conversion_mode = conversion_mode_var.get()
+            auto_update = auto_update_var.get() == "True"
+            update_interval = int(update_interval_var.get()) if update_interval_var.get().isdigit() else 60
+            
+            # エンコーディング値の正規化
+            if enc == "auto (自動判別)":
+                enc = "auto"
+                
+            save_settings(p_dir, m_dir, enc, conversion_mode, auto_update, update_interval)
+            print("設定が正常に保存されました。")
+            
+        except Exception as e:
+            print(f"ウィンドウクローズ時の設定保存中にエラーが発生しました: {e}", file=sys.stderr)
+            write_error_log(f"ウィンドウクローズ時エラー: {e}")
+        finally:
+            window.destroy()
 
     window.protocol("WM_DELETE_WINDOW", on_closing)
 
