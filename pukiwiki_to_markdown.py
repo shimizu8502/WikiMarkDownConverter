@@ -644,7 +644,9 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if status_var:
                 status_var.set(f"ℹ️ 更新されたファイルはありません [{current_time}]")
-            messagebox.showinfo("情報", f"更新されたファイルはありません。\n\n確認時刻: {current_time}")
+            # 更新変換モードではポップアップを表示しない
+            if conversion_mode != 'update':
+                messagebox.showinfo("情報", f"更新されたファイルはありません。\n\n確認時刻: {current_time}")
             
             # 自動更新が有効な場合は次の更新をスケジュール
             if auto_update and not auto_update_running:
@@ -769,8 +771,8 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
         result_message += f"\nエラーの詳細は '{os.path.join(LOG_DIR, ERROR_LOG_FILE)}' を確認してください。"
     print(result_message)
     
-    # 自動更新モードでない場合のみメッセージボックスを表示
-    if not auto_update:
+    # 更新変換モードと自動更新時はポップアップを表示しない
+    if conversion_mode != 'update' and not auto_update:
         messagebox.showinfo("処理完了", result_message)
 
     # --- 変換されたMarkdownファイルを1つに連結してlogsディレクトリに保存 --- START
@@ -802,7 +804,8 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
                 with open(concatenated_filepath, 'w', encoding='utf-8') as f_concat:
                     f_concat.write("".join(all_markdown_content))
                 print(f"情報: 変換されたMarkdownファイルを連結し、'{concatenated_filepath}' に保存しました。")
-                if not auto_update:
+                # 更新変換モードと自動更新時はポップアップを表示しない
+                if conversion_mode != 'update' and not auto_update:
                     messagebox.showinfo("追加処理完了", f"変換されたMarkdownファイルを連結し、\n'{concatenated_filepath}'\nに保存しました。\n\n処理完了時刻: {end_time_str}")
             else:
                 print("情報: 連結対象のMarkdownファイルが見つからなかったため、連結ファイルの作成はスキップされました。")
@@ -811,7 +814,8 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
         error_message = f"Markdownファイルの連結処理中にエラーが発生しました: {e_concat}"
         print(error_message, file=sys.stderr)
         write_error_log(error_message)
-        if not auto_update:
+        # 更新変換モードと自動更新時はポップアップを表示しない
+        if conversion_mode != 'update' and not auto_update:
             messagebox.showerror("連結エラー", error_message)
     # --- 変換されたMarkdownファイルを1つに連結してlogsディレクトリに保存 --- END
 
