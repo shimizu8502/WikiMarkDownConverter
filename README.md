@@ -57,7 +57,7 @@ https://deepwiki.com/shimizu8502/WikiMarkDownConverter/1-wikimarkdownconverter-o
 - **文字コード自動判別**: UTF-8, EUC-JP, Shift_JIS
 - **手動文字コード指定**: 自動判別が困難な場合の手動選択
 - **16進エンコードファイル名**: PukiWikiファイル名の自動デコード
-- **ファイル連結**: 全Markdownファイルを日付付きで1ファイルに統合
+- **ファイル連結**: 全Markdownファイルを日付付きで1ファイルに統合（自動更新時は除く）
 
 ### エラー処理・ログ機能
 - **エラーログ**: `logs/conversion_errors.log` への詳細記録
@@ -143,6 +143,7 @@ python pukiwiki_to_markdown.py
 - **日付_obsidian.md**: 全Markdownファイルの連結ファイル
   - `logs/` ディレクトリ内に保存
   - ファイル区切り情報付きで全内容を統合
+  - **注意**: 自動更新が有効な場合は作成されません
 
 ### リンク形式
 - **Obsidian互換**: `[[ページ名]]` または `[[ページ名|エイリアス]]`
@@ -228,7 +229,7 @@ PukiWiki to Markdown Converter v1.3
 │   ├── 文字コード自動判別・手動指定
 │   ├── 16進ファイル名デコード
 │   ├── 不正文字処理
-│   └── 連結ファイル生成
+│   └── 連結ファイル生成（自動更新時は除く）
 ├── 🖥️ GUI
 │   ├── ディレクトリ選択
 │   ├── 変換モード選択

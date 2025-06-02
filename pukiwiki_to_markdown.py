@@ -777,7 +777,8 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
 
     # --- 変換されたMarkdownファイルを1つに連結してlogsディレクトリに保存 --- START
     try:
-        if file_count > 0: # 変換されたファイルが1つ以上ある場合のみ実行
+        # 自動更新がチェックされている場合は連結ファイルを作成しない
+        if file_count > 0 and not auto_update: # 変換されたファイルが1つ以上あり、かつ自動更新が無効の場合のみ実行
             if not os.path.exists(LOG_DIR):
                 os.makedirs(LOG_DIR)
             
@@ -809,6 +810,8 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
                     messagebox.showinfo("追加処理完了", f"変換されたMarkdownファイルを連結し、\n'{concatenated_filepath}'\nに保存しました。\n\n処理完了時刻: {end_time_str}")
             else:
                 print("情報: 連結対象のMarkdownファイルが見つからなかったため、連結ファイルの作成はスキップされました。")
+        elif auto_update:
+            print("情報: 自動更新が有効のため、連結ファイル（日付_obsidian.md）の作成をスキップしました。")
 
     except Exception as e_concat:
         error_message = f"Markdownファイルの連結処理中にエラーが発生しました: {e_concat}"
