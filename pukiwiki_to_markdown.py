@@ -103,6 +103,10 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     markdown_text = re.sub(r'^-([^ ].+)$', r'- \1', markdown_text, flags=re.MULTILINE)  # 単一ハイフン
     markdown_text = re.sub(r'^--([^ ].+)$', r'-- \1', markdown_text, flags=re.MULTILINE)  # 二重ハイフン
     markdown_text = re.sub(r'^---([^ ].+)$', r'---- \1', markdown_text, flags=re.MULTILINE)  # 三重ハイフン→四重ハイフン
+    
+    # 特定のパターンの修正：-httpを- httpに変換（URLではない場合）
+    # URLパターン（https://、http://）は除外して、単独の-httpパターンのみを対象とする
+    markdown_text = re.sub(r'(?<!s:/)(?<!:\/)\-http(?!s?://)', r'- http', markdown_text)
 
     # 強調の変換
     markdown_text = re.sub(r"'''(.*?)'''", r'**\1**', markdown_text)
