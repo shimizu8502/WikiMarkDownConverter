@@ -99,12 +99,20 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     markdown_text = re.sub(r'^- (.+)$', r'- \1', markdown_text, flags=re.MULTILINE)
     markdown_text = re.sub(r'^\+ (.+)$', r'* \1', markdown_text, flags=re.MULTILINE) # PukiWikiの '+' リストは '*' に変換
     
-    # ハイフンとテキストの間にスペースがない場合、スペースを追加
-    markdown_text = re.sub(r'^-([^ ].+)$', r'- \1', markdown_text, flags=re.MULTILINE)  # 単一ハイフン
-    markdown_text = re.sub(r'^--([^ ].+)$', r'-- \1', markdown_text, flags=re.MULTILINE)  # 二重ハイフン
-    markdown_text = re.sub(r'^---([^ ].+)$', r'---- \1', markdown_text, flags=re.MULTILINE)  # 三重ハイフン→四重ハイフン
+    # 外部リンク（http）を含むハイフンパターンの特別な変換処理
+    # ---http → - -- http
+    markdown_text = re.sub(r'^---http(?!s?://)', r'- -- http', markdown_text, flags=re.MULTILINE)
+    # --http → - - http
+    markdown_text = re.sub(r'^--http(?!s?://)', r'- - http', markdown_text, flags=re.MULTILINE)
+    # -http → - http
+    markdown_text = re.sub(r'^-http(?!s?://)', r'- http', markdown_text, flags=re.MULTILINE)
     
-    # 特定のパターンの修正：-httpを- httpに変換（URLではない場合）
+    # ハイフンとテキストの間にスペースがない場合、スペースを追加（http以外）
+    markdown_text = re.sub(r'^-([^ ](?!http).+)$', r'- \1', markdown_text, flags=re.MULTILINE)  # 単一ハイフン（httpを除外）
+    markdown_text = re.sub(r'^--([^ ](?!http).+)$', r'-- \1', markdown_text, flags=re.MULTILINE)  # 二重ハイフン（httpを除外）
+    markdown_text = re.sub(r'^---([^ ](?!http).+)$', r'---- \1', markdown_text, flags=re.MULTILINE)  # 三重ハイフン→四重ハイフン（httpを除外）
+    
+    # 特定のパターンの修正（行頭以外の場所での-httpを- httpに変換）
     # URLパターン（https://、http://）は除外して、単独の-httpパターンのみを対象とする
     markdown_text = re.sub(r'(?<!s:/)(?<!:\/)\-http(?!s?://)', r'- http', markdown_text)
 
