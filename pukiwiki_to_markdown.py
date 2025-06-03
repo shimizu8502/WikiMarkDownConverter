@@ -124,6 +124,51 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     # 前後のスペースを削除して変換する
     markdown_text = re.sub(r"%%(.+?)%%", lambda m: f'~~{m.group(1).strip()}~~', markdown_text)
 
+    # フォントサイズ指定の変換 (PukiWiki: &size(サイズ){テキスト} -> Obsidian: <span style="font-size: サイズpx;">テキスト</span>)
+    def convert_size(match):
+        size = match.group(1)
+        text = match.group(2)
+        # サイズが数値のみの場合はpxを付加、既に単位がある場合はそのまま使用
+        if size.isdigit():
+            size += 'px'
+        return f'<span style="font-size: {size};">{text}</span>'
+    
+    markdown_text = re.sub(r'&size\(([^)]+)\)\{([^}]+)\}', convert_size, markdown_text)
+
+    # 色指定の変換 (PukiWiki: &color(色){テキスト} -> Obsidian: <span style="color: 色;">テキスト</span>)
+    # &color(文字色,背景色){テキスト} -> <span style="color: 文字色; background-color: 背景色;">テキスト</span>
+    def convert_color(match):
+        colors = match.group(1)
+        text = match.group(2)
+        
+        # カンマで区切られているかチェック
+        if ',' in colors:
+            color_parts = colors.split(',', 1)
+            text_color = color_parts[0].strip()
+            bg_color = color_parts[1].strip()
+            
+            # 空の色指定を処理
+            style_parts = []
+            if text_color:
+                style_parts.append(f'color: {text_color}')
+            if bg_color:
+                style_parts.append(f'background-color: {bg_color}')
+            
+            if style_parts:
+                style = '; '.join(style_parts)
+                return f'<span style="{style};">{text}</span>'
+            else:
+                return text  # 色指定がない場合はテキストのみ返す
+        else:
+            # 文字色のみの場合
+            text_color = colors.strip()
+            if text_color:
+                return f'<span style="color: {text_color};">{text}</span>'
+            else:
+                return text  # 色指定がない場合はテキストのみ返す
+    
+    markdown_text = re.sub(r'&color\(([^)]*)\)\{([^}]+)\}', convert_color, markdown_text)
+
     # リンクの変換 [[エイリアス>ページ名]] -> [[ページ名|エイリアス]] (Obsidian形式)
     markdown_text = re.sub(r'\[\[([^>\]]+)>([^\]]+)\]\]', r'[[\2|\1]]', markdown_text)
     # リンクの変換 [[ページ名]] -> [[ページ名]] (Obsidian形式, .md を削除)
