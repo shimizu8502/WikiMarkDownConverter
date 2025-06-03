@@ -40,10 +40,19 @@ https://deepwiki.com/shimizu8502/WikiMarkDownConverter/1-wikimarkdownconverter-o
 - **リスト**: 
   - `-`, `+` の変換と自動修正
   - `- 文字列`, `-- 文字列`, `---- 文字列` への正規化
+  - **外部リンク対応**: 
+    - `-http` → `- http`
+    - `--http` → `- - http`
+    - `---http` → `- -- http`
 - **強調**: 
   - `'''文字列'''` → `**文字列**`
   - `''文字列''` → `*文字列*`
 - **取り消し線**: `%%文字列%%` → `~~文字列~~` (Obsidian形式)
+- **装飾記法**:
+  - **フォントサイズ**: `&size(12){テキスト}` → `<span style="font-size: 12px;">テキスト</span>`
+  - **色指定**: 
+    - `&color(red){テキスト}` → `<span style="color: red;">テキスト</span>`
+    - `&color(red,yellow){テキスト}` → `<span style="color: red; background-color: yellow;">テキスト</span>`
 - **リンク**: 
   - `[[ページ名]]` → `[[ページ名]]` (Obsidian形式)
   - `[[エイリアス>ページ名]]` → `[[ページ名|エイリアス]]` (Obsidian形式)
@@ -152,6 +161,56 @@ python pukiwiki_to_markdown.py
 - **Obsidian互換**: `[[ページ名]]` または `[[ページ名|エイリアス]]`
 - **表組み**: テーブル前の改行挿入でObsidian表示最適化
 
+## 🎨 装飾記法の変換仕様（NEW）
+
+### フォントサイズ指定
+**PukiWiki記法** → **Obsidian対応（HTML）**
+
+```
+&size(12){テキスト}        → <span style="font-size: 12px;">テキスト</span>
+&size(1.5em){テキスト}     → <span style="font-size: 1.5em;">テキスト</span>
+&size(150%){テキスト}      → <span style="font-size: 150%;">テキスト</span>
+```
+
+**特徴:**
+- 数値のみの場合は自動的に`px`単位を付加
+- `em`、`%`、`pt`等の単位が指定済みの場合はそのまま使用
+- Obsidianで正しく表示されるHTML形式で出力
+
+### 色指定
+**PukiWiki記法** → **Obsidian対応（HTML）**
+
+#### 文字色のみ指定:
+```
+&color(red){テキスト}      → <span style="color: red;">テキスト</span>
+&color(#ff0000){テキスト}  → <span style="color: #ff0000;">テキスト</span>
+&color(blue){重要なテキスト} → <span style="color: blue;">重要なテキスト</span>
+```
+
+#### 文字色と背景色を同時指定:
+```
+&color(red,yellow){テキスト}     → <span style="color: red; background-color: yellow;">テキスト</span>
+&color(#000,#ffff00){テキスト}   → <span style="color: #000; background-color: #ffff00;">テキスト</span>
+&color(white,navy){強調テキスト}  → <span style="color: white; background-color: navy;">強調テキスト</span>
+```
+
+#### 部分的な色指定:
+```
+&color(,yellow){テキスト}   → <span style="background-color: yellow;">テキスト</span>  (背景色のみ)
+&color(red,){テキスト}      → <span style="color: red;">テキスト</span>              (文字色のみ)
+```
+
+**対応色形式:**
+- **CSS色名**: red, blue, green, yellow, black, white, navy, etc.
+- **16進数カラーコード**: #ff0000, #00ff00, #0000ff, #ffffff, etc.
+- **RGB値**: rgb(255,0,0), rgba(255,0,0,0.5), etc.
+- **その他CSS色指定**: hsl(), etc.
+
+**変換ルール:**
+- 空の色指定は無視（テキストのみ出力）
+- 不正な色指定がある場合でも処理を継続
+- カンマ区切りで文字色と背景色を分離
+
 ## ⚠️ 注意事項
 
 ### 対応状況
@@ -189,7 +248,7 @@ updateinterval = [更新間隔（分）]
 ## 🗺️ 機能マインドマップ
 
 ```
-PukiWiki to Markdown Converter v1.3
+PukiWiki to Markdown Converter v1.4
 ├── 🔄 変換モード
 │   ├── 全変換
 │   │   ├── 既存mdファイル削除
@@ -218,7 +277,12 @@ PukiWiki to Markdown Converter v1.3
 ├── 🔧 PukiWiki構文変換
 │   ├── 見出し (*→#, **→##, ***→###)
 │   ├── リスト変換・自動修正
+│   │   ├── 基本リスト (-→-, +→*)
+│   │   └── 外部リンク対応 (-http→- http, --http→- - http, ---http→- -- http)
 │   ├── 強調・取り消し線
+│   ├── 装飾記法 ⭐NEW⭐
+│   │   ├── フォントサイズ (&size(12){テキスト}→<span style="font-size: 12px;">テキスト</span>)
+│   │   └── 色指定 (&color(色,背景色){テキスト}→HTML span要素)
 │   ├── リンク (Obsidian形式)
 │   ├── 画像変換
 │   ├── 整形済みテキスト → コードブロック
