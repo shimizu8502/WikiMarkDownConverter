@@ -174,8 +174,9 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     # リンクの変換 [[ページ名]] -> [[ページ名]] (Obsidian形式, .md を削除)
     markdown_text = re.sub(r'\[\[([^\]>]+)\]\]', r'[[\1]]', markdown_text)
 
-    # 画像の変換 #ref(画像URL,altテキスト) -> ![altテキスト](画像URL)
-    markdown_text = re.sub(r'#ref\(([^,]+),?([^)]*)\)', r'![\2](\1)', markdown_text)
+    # 画像の変換 #ref(画像ファイル名) -> ![[画像ファイル名]] (Obsidian形式)
+    # #ref(画像ファイル名,altテキスト) -> ![[画像ファイル名]] (altテキストは無視)
+    markdown_text = re.sub(r'#ref\(([^,)]+)(?:,[^)]*)?\)', r'![[\1]]', markdown_text)
 
     # 行頭のbr/BRを改行に変換
     markdown_text = re.sub(r'^#br\s*$', '\n', markdown_text, flags=re.MULTILINE)
