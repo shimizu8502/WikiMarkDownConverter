@@ -926,7 +926,7 @@ def main_gui():
     GUIアプリケーションのメイン処理
     """
     window = tk.Tk()
-    window.title("PukiWiki to Markdown Converter v1.2")
+    window.title("PukiWiki to Markdown Converter v20250606_0815")
     window.geometry("750x650+100+100")  # +100+100で左上に配置
     window.minsize(700, 600)
     
