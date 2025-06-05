@@ -706,7 +706,7 @@ def process_conversion(pukiwiki_dir, markdown_dir, specified_encoding=None, prog
                 messagebox.showinfo("情報", f"更新されたファイルはありません。\n\n確認時刻: {current_time}")
             
             # 自動更新が有効な場合は次の更新をスケジュール
-            if auto_update and not auto_update_running:
+            if auto_update:
                 schedule_auto_update(pukiwiki_dir, markdown_dir, specified_encoding, progress_bar, status_var, root_window, conversion_mode, auto_update, update_interval)
             return
         
