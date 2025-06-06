@@ -509,6 +509,41 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
 
     markdown_text = "\n".join(other_lines)
 
+    # [[#文字列]]リンクの処理：同一ファイル内に対応する見出しがある場合、リンク先情報を追記
+    def process_heading_links(text):
+        """
+        [[#文字列]]形式のリンクを処理し、同一ファイル内に対応する見出しがある場合、
+        リンク先の内容を追記します。
+        """
+        # [[#文字列]]パターンを検索
+        heading_link_pattern = r'\[\[#([^\]]+)\]\]'
+        
+        def replace_heading_link(match):
+            anchor_id = match.group(1)
+            original_link = match.group(0)
+            
+            # 同一テキスト内で [#anchor_id] を含む見出し行を検索
+            heading_pattern = r'^(#+)\s*([^[]*?)\s*\[#' + re.escape(anchor_id) + r'\].*$'
+            heading_matches = re.findall(heading_pattern, text, re.MULTILINE)
+            
+            if heading_matches:
+                # 最初に見つかった見出しを使用
+                heading_level, heading_title = heading_matches[0]
+                heading_title = heading_title.strip()
+                
+                # リンク先情報を追記
+                result = f"{original_link}\n  リンク先 [[#{heading_title} [#{anchor_id}]]]"
+                return result
+            else:
+                # 対応する見出しが見つからない場合は元のリンクをそのまま返す
+                return original_link
+        
+        # 全ての[[#文字列]]リンクを処理
+        return re.sub(heading_link_pattern, replace_heading_link, text)
+    
+    # 見出しリンクの処理を実行
+    markdown_text = process_heading_links(markdown_text)
+
     return markdown_text.strip()
 
 def get_timestamp_file_path(markdown_dir):
