@@ -97,6 +97,8 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
 
     # リストの変換
     markdown_text = re.sub(r'^- (.+)$', r'- \1', markdown_text, flags=re.MULTILINE)
+    # プラス記号とテキストの間にスペースがない場合、スペースを追加
+    markdown_text = re.sub(r'^\+([^ ].+)$', r'+ \1', markdown_text, flags=re.MULTILINE)
     markdown_text = re.sub(r'^\+ (.+)$', r'* \1', markdown_text, flags=re.MULTILINE) # PukiWikiの '+' リストは '*' に変換
     
     # 外部リンク（http）を含むハイフンパターンの特別な変換処理
@@ -961,7 +963,7 @@ def main_gui():
     GUIアプリケーションのメイン処理
     """
     window = tk.Tk()
-    window.title("PukiWiki to Markdown Converter v20250606_1231")
+    window.title("PukiWiki to Markdown Converter v20250606_1524")
     window.geometry("750x650+100+100")  # +100+100で左上に配置
     window.minsize(700, 600)
     
