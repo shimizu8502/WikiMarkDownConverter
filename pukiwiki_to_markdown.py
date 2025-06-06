@@ -532,7 +532,7 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
                 heading_title = heading_title.strip()
                 
                 # リンク先情報を追記
-                result = f"{original_link}\n  リンク先 [[#{heading_title} [#{anchor_id}]]]"
+                result = f"{original_link}\n  リンク先 [[#{heading_title} [ {anchor_id}]]]"
                 return result
             else:
                 # 対応する見出しが見つからない場合は元のリンクをそのまま返す
