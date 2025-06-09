@@ -1,12 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
+c:
+cd C:\Users\shimizu\OneDrive - ACTUNI\General\NDI事業部\000_社内サーバー移行\アプリ\WikiMarkDownConverter
+
 
 echo ====================================
 echo PukiWiki to Markdown Converter 起動
 echo ====================================
-G:
-cd G:\マイドライブ\soft\000_GitHubClone\WikiMarkDownConverter
-
 
 :: 仮想環境があれば有効化
 if exist venv (
