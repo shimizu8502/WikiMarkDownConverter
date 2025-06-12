@@ -118,6 +118,49 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     # URLパターン（https://、http://）は除外して、単独の-httpパターンのみを対象とする
     markdown_text = re.sub(r'(?<!s:/)(?<!:\/)\-http(?!s?://)', r'- http', markdown_text)
 
+    # リスト項目の後続行にインデントを追加
+    lines = markdown_text.split('\n')
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped_line = line.strip()
+        
+        # 現在の行がリスト項目かどうか判定
+        is_list_item = (stripped_line.startswith('- ') or 
+                       stripped_line.startswith('* ') or 
+                       stripped_line.startswith('+ '))
+        
+        if is_list_item:
+            # リスト項目の後続行を処理
+            j = i + 1
+            while j < len(lines):
+                next_line = lines[j]
+                next_stripped = next_line.strip()
+                
+                # 処理を終了する条件
+                # - 空行
+                # - 次のリスト項目
+                # - 見出し
+                # - テーブル行
+                # - コードブロック開始
+                if (not next_stripped or
+                    next_stripped.startswith(('- ', '* ', '+ ')) or
+                    next_stripped.startswith('#') or
+                    next_stripped.startswith('|') or
+                    next_stripped.startswith('```')):
+                    break
+                
+                # 既にインデントされていない場合のみタブを追加
+                if not next_line.startswith(('\t', '    ')):
+                    lines[j] = '\t' + next_line
+                
+                j += 1
+        
+        i += 1
+    
+    markdown_text = '\n'.join(lines)
+
     # 強調の変換
     markdown_text = re.sub(r"'''(.*?)'''", r'**\1**', markdown_text)
     markdown_text = re.sub(r"''(.*?)''", r'*\1*', markdown_text)
@@ -963,7 +1006,7 @@ def main_gui():
     GUIアプリケーションのメイン処理
     """
     window = tk.Tk()
-    window.title("PukiWiki to Markdown Converter v20250606_1524")
+    window.title("PukiWiki to Markdown Converter v20250612_1641")
     window.geometry("750x650+100+100")  # +100+100で左上に配置
     window.minsize(700, 600)
     
