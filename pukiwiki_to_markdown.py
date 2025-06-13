@@ -589,6 +589,9 @@ def convert_pukiwiki_to_markdown(pukiwiki_text):
     # 見出しリンクの処理を実行
     markdown_text = process_heading_links(markdown_text)
 
+    # [#文字列] 形式のパターンを削除
+    markdown_text = re.sub(r'\[#[^\]]+\]', '', markdown_text)
+
     return markdown_text.strip()
 
 def get_timestamp_file_path(markdown_dir):
@@ -1006,7 +1009,7 @@ def main_gui():
     GUIアプリケーションのメイン処理
     """
     window = tk.Tk()
-    window.title("PukiWiki to Markdown Converter v20250612_1641")
+    window.title("PukiWiki to Markdown Converter v20250613_0957")
     window.geometry("750x650+100+100")  # +100+100で左上に配置
     window.minsize(700, 600)
     
